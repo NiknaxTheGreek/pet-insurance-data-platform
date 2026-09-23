@@ -1,5 +1,9 @@
--- One-time account bootstrap for GitHub Actions OIDC.
--- Run this entire file once as ACCOUNTADMIN. It is safe to rerun.
+-- PROPOSED PRODUCTION BOOTSTRAP — NOT THE CURRENT TRIAL DEPLOYMENT.
+-- The verified live project currently runs with SNOWFLAKE_LEARNING_ROLE,
+-- SNOWFLAKE_LEARNING_WH and SNOWFLAKE_LEARNING_DB.
+-- This file records the intended least-privilege production bootstrap and
+-- has not been verified end-to-end in the current trial account.
+-- Review privileges and identifiers before running in another environment.
 
 USE ROLE ACCOUNTADMIN;
 
