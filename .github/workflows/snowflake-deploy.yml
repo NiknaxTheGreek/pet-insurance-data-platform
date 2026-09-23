@@ -28,14 +28,14 @@ jobs:
           use-oidc: true
           cli-version: "3.16.0"
 
-      - name: Verify Snowflake identity
+      - name: Verify OIDC identity and granted roles
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
-          SNOWFLAKE_ROLE: PET_INSURANCE_CICD_ROLE
+          SNOWFLAKE_ROLE: PUBLIC
         run: |
           snow connection test -x
-          snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE();" -x
+          snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE(), CURRENT_AVAILABLE_ROLES();" -x
 
       - name: Deploy Snowflake platform objects
         env:
