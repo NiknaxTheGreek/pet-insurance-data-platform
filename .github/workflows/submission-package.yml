@@ -1,0 +1,41 @@
+name: Submission Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/package-submission.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write build metadata
+        run: |
+          cat > SUBMISSION_BUILD.txt <<EOF
+          repository=NiknaxTheGreek/pet-insurance-data-platform
+          commit=$GITHUB_SHA
+          workflow_run=$GITHUB_RUN_ID
+          built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+
+      - name: Remove generated/cache files
+        run: |
+          rm -rf .git dbt/target .pytest_cache
+          find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+
+      - name: Upload submission candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: pet-insurance-data-platform-submission-candidate
+          path: .
+          include-hidden-files: true
+          retention-days: 90
