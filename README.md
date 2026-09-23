@@ -20,7 +20,12 @@ Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processi
 - The claims watermark is verified at `2026-09-22 13:56:00Z / CLM-10042`.
 - The reusable Python ingestion core implements composite watermarks, canonical SHA-256 payload hashing, soft-delete operation mapping, in-batch deduplication and reconciliation.
 - Python ingestion/seed tests are green in GitHub Actions.
-- A live PostgreSQL→Snowflake workflow is implemented and awaits only the repository `POSTGRES_DSN` secret.
+- The live PostgreSQL→Snowflake workflow is active using the repository `POSTGRES_DSN` secret and Snowflake OIDC.
+- Initial live reconciliation repaired a bootstrap watermark gap without duplicating `CLM-10042`: Snowflake RAW now contains all 3 live claim PKs while preserving historical versions.
+- T4 is verified end-to-end: `CLM-10042` changed to `PAID`, payment `PAY-10042-T4` for R9,700 was inserted in PostgreSQL, and both changes were incrementally propagated to Snowflake.
+- Snowflake now preserves the `CLM-10042` state sequence `SUBMITTED → APPROVED → PAID` with amounts R8,500 → R11,200 and approved/paid amount R9,700.
+- The immediate no-change replay produced 0 candidates / 0 inserts for all five source tables, proving idempotent incremental behavior after T4.
+- Claims and claim-payment watermarks are both verified at `2026-09-23 19:40:00Z` for `CLM-10042` and `PAY-10042-T4` respectively.
 
 ## Repository paths
 - `src/insurance_platform/ingestion.py` — reusable CDC/incremental primitives.
