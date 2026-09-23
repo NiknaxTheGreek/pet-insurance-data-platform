@@ -2,6 +2,12 @@ name: Snowflake OIDC Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/snowflake/**"
+      - ".github/workflows/snowflake-deploy.yml"
 
 permissions:
   id-token: write
@@ -25,6 +31,8 @@ jobs:
       - name: Verify Snowflake identity
         env:
           SNOWFLAKE_ACCOUNT: HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: PET_INSURANCE_CICD_ROLE
         run: |
           snow connection test -x
           snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE();" -x
@@ -32,4 +40,6 @@ jobs:
       - name: Deploy Snowflake platform objects
         env:
           SNOWFLAKE_ACCOUNT: HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: PET_INSURANCE_CICD_ROLE
         run: snow sql -f infra/snowflake/deploy.sql -x
