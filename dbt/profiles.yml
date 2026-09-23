@@ -1,0 +1,17 @@
+pet_insurance:
+  target: ci
+  outputs:
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'SNOWFLAKE_LEARNING_ROLE') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'SNOWFLAKE_LEARNING_DB') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'SNOWFLAKE_LEARNING_WH') }}"
+      schema: PET_INSURANCE_STAGING
+      authenticator: workload_identity
+      workload_identity_provider: OIDC
+      token: "{{ env_var('SNOWFLAKE_TOKEN') }}"
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: pet_insurance_dbt_ci
