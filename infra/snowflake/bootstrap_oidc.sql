@@ -22,7 +22,7 @@ CREATE USER IF NOT EXISTS PET_INSURANCE_GITHUB
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:NiknaxTheGreek/pet-insurance-data-platform:ref:refs/heads/main'
+    SUBJECT = 'repo:NiknaxTheGreek@97730962/pet-insurance-data-platform@1383094257:ref:refs/heads/main'
   )
   DEFAULT_ROLE = PET_INSURANCE_CICD_ROLE
   COMMENT = 'Secretless GitHub Actions service user for pet-insurance-data-platform';
