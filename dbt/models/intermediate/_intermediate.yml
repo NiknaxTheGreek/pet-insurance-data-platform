@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: int_claim_events
+    description: Incremental append of claim versions from RAW, keyed by monotonically increasing RAW_RECORD_ID.
+    columns:
+      - name: raw_record_id
+        data_tests: [not_null, unique]
+      - name: claim_id
+        data_tests: [not_null]
+      - name: source_updated_at
+        data_tests: [not_null]
+
+  - name: int_policy_claims
+    description: One row per current policy with claim and payment rollups.
+    columns:
+      - name: policy_id
+        data_tests: [not_null, unique]
