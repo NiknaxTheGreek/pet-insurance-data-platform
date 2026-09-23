@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from decimal import Decimal
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Protocol, Sequence
@@ -60,6 +61,8 @@ def payload_sha256(payload: Mapping[str, Any]) -> str:
 def _json_default(value: Any) -> str:
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, Decimal):
+        return format(value, "f")
     if hasattr(value, "isoformat"):
         return value.isoformat()
     raise TypeError(f"Unsupported JSON value: {type(value)!r}")
