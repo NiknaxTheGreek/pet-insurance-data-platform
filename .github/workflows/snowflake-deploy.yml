@@ -28,14 +28,14 @@ jobs:
           use-oidc: true
           cli-version: "3.16.0"
 
-      - name: Verify OIDC identity and granted roles
+      - name: Verify OIDC identity
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
           SNOWFLAKE_ROLE: PUBLIC
         run: |
           snow connection test -x
-          snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE(), CURRENT_AVAILABLE_ROLES(); SHOW GRANTS TO ROLE SNOWFLAKE_LEARNING_ROLE;" -x
+          snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE(), CURRENT_AVAILABLE_ROLES();" -x
 
       - name: Deploy Snowflake platform objects
         env:
@@ -43,3 +43,24 @@ jobs:
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
           SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
         run: snow sql -f infra/snowflake/deploy.sql -x
+
+      - name: Load verified PostgreSQL claim history
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: snow sql -f infra/snowflake/load_verified_claim_history.sql -x
+
+      - name: Replay same load to prove idempotency
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: snow sql -f infra/snowflake/load_verified_claim_history.sql -x
+
+      - name: Verify history, current state and watermark
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: snow sql -f infra/snowflake/verify_claim_history.sql -x
