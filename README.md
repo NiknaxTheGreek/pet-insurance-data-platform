@@ -1,59 +1,247 @@
 # Pet Insurance Claims & Portfolio Data Platform
 
-A production-style data-engineering portfolio project demonstrating how mutable operational insurance data is incrementally moved from PostgreSQL into Snowflake and transformed with dbt into tested analytics-ready datasets.
+[![Platform CI](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/platform-ci.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/platform-ci.yml)
+[![Reliability Suite](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml)
+[![dbt Build](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/dbt-build.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/dbt-build.yml)
 
-## Locked vertical slice
-Pet insurance only. Source entities: customers, pets, policies, claims, claim payments.
+A production-style data-engineering project for a mutable pet-insurance workload.
 
-## Engineering capabilities demonstrated
-Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processing/CDC concepts, idempotency, data quality, testing, observability/reconciliation, CI/CD, documentation, and engineering judgement.
+Operational customer, pet, policy, claim and payment records originate in PostgreSQL and are incrementally propagated into Snowflake, transformed with dbt, tested, documented and exposed as trusted analytical datasets.
 
-## Current verified state
-- GitHub Actions authenticates to Snowflake with short-lived OIDC workload identity; no Snowflake password is stored.
-- Snowflake RAW, STAGING, INTERMEDIATE, MARTS, and CONTROL schemas are live under `SNOWFLAKE_LEARNING_DB`.
-- The live PostgreSQL→Snowflake workflow uses a repository `POSTGRES_DSN` secret for the source and OIDC for Snowflake.
-- Python ingestion uses composite `updated_at + source_pk` watermarks, canonical SHA-256 payload hashes, append-only RAW history, soft-delete operation mapping, batch audit rows, reconciliation, and idempotent MERGE logic.
-- A bootstrap watermark gap was detected by reconciliation and repaired with a one-time missing-primary-key backfill. Snowflake contains all 3 live claim PKs without losing claim history.
-- `CLM-10042` is verified end-to-end through three historical versions:
-  - T1 — `SUBMITTED`, R8,500.
-  - T3 — `APPROVED`, R11,200 with R9,700 approved.
-  - T4 — `PAID`, R11,200 with R9,700 approved and R9,700 paid.
-- The T4 incremental run detected exactly 1 changed claim and 1 new payment; the immediate replay detected 0 candidates / 0 inserts across all five source tables.
-- dbt Core 1.12.5 with `dbt-snowflake 1.12.1` authenticates through the same OIDC identity.
-- The dbt project contains 11 models across staging, intermediate, and marts, including one incremental claim-event model and one customer SCD2 history dimension.
-- The verified dbt build completed with `PASS=67 WARN=0 ERROR=0 SKIP=0` across 11 models and 56 tests.
-- dbt docs artifacts (`manifest.json`, `run_results.json`, `catalog.json`, `index.html`) are generated in CI.
-- `FCT_CLAIMS` verifies `CLM-10042` as `PAID` with R11,200 claimed / R9,700 approved / R9,700 paid.
-- `INT_CLAIM_EVENTS` verifies the historical sequence `SUBMITTED → APPROVED → PAID` and remains at exactly 3 rows after repeated dbt/incremental runs.
-- A real customer attribute change was propagated from PostgreSQL through RAW and dbt:
-  - `CUS-00001` historical row: Gauteng, closed at 2026-09-23 20:10Z.
-  - `CUS-00001` current row: Western Cape, effective from 2026-09-23 20:10Z.
-- The customer change produced exactly 1 source candidate / 1 RAW insert; the immediate replay produced 0 inserts. SCD2 and claim-event idempotency assertions both passed.
-- Controlled reliability suite is green: dbt catches an intentionally invalid payment date, the source is repaired and retested, a late-arriving claim is recovered through reconciliation/backfill without duplication, and a source soft delete is propagated into RAW and removed from the trusted claim mart.
-- The checked-in PostgreSQL schema now matches the live text-ID contract and is exercised from scratch with PostgreSQL 16 in Docker on GitHub Actions.
-- Consolidated Platform CI is green across Python static checks/tests, Docker/PostgreSQL smoke validation, Snowflake OIDC, full dbt build, dbt docs generation, and trusted mart/history assertions.
+The implementation focuses on **incremental processing, CDC semantics, historical correctness, idempotency, reconciliation, data quality, observability, testing and CI/CD** rather than simply connecting tools together.
 
-## Data flow
-`PostgreSQL → Python incremental ingestion → Snowflake RAW/CONTROL → dbt STAGING → dbt INTERMEDIATE → dbt MARTS`
+## Business problem
 
-## Key repository paths
-- `src/insurance_platform/ingestion.py` — reusable CDC/incremental primitives.
-- `src/insurance_platform/run_ingestion.py` — live PostgreSQL→Snowflake runner.
-- `src/insurance_platform/repair_initial_backfill.py` — reconciliation-driven initial backfill repair.
-- `infra/snowflake/deploy.sql` — RAW/CONTROL platform objects.
-- `dbt/models/staging/` — current-state typed source models.
-- `dbt/models/intermediate/int_claim_events.sql` — incremental historical claim-event model.
-- `dbt/models/intermediate/int_policy_claims.sql` — policy-level claim/payment rollup.
-- `dbt/models/marts/fct_claims.sql` — trusted current claim fact.
-- `dbt/models/marts/dim_policy.sql` — current policy dimension.
-- `dbt/models/marts/dim_customer_scd2.sql` — Type-2 customer history.
-- `dbt/models/marts/mart_portfolio_performance.sql` — portfolio performance mart.
-- `.github/workflows/dbt-build.yml` — dbt debug/build/docs/verification CI.
-- `.github/workflows/t4-demo.yml` — paid-claim CDC demonstration.
-- `.github/workflows/customer-scd2-demo.yml` — customer-history/SCD2 demonstration.
-- `.github/workflows/reliability-suite.yml` — controlled failure, recovery, late-arrival, and soft-delete proof.
-- `.github/workflows/platform-ci.yml` — consolidated Python + Docker/PostgreSQL + Snowflake/dbt CI gate.
-- `infra/postgres/smoke_test.sql` — clean-container schema, relationship, and constraint smoke test.
-- `docs/reliability.md` — verified failure/recovery evidence and CI results.
+A pet insurer stores operational data in PostgreSQL. Policies are amended, claims change state and amount, payments arrive later, customer attributes change, and records can be cancelled or soft-deleted.
 
-See `docs/source_contract.md` and `docs/dbt_modeling.md` for implementation detail.
+Simple periodic snapshots risk stale, duplicated or historically incorrect analytics.
+
+The platform answers:
+
+> How is the pet-insurance portfolio performing, and which segments are driving changes in claims performance?
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[PostgreSQL<br/>mutable operational source]
+    B[Python ingestion<br/>watermarks + hashing + reconciliation]
+    C[Snowflake RAW<br/>append-only VARIANT history]
+    D[Snowflake CONTROL<br/>watermarks + batch audit]
+    E[dbt STAGING<br/>typed current state]
+    F[dbt INTERMEDIATE<br/>events + policy rollups]
+    G[dbt MARTS<br/>facts + dimensions + portfolio mart]
+    H[GitHub Actions<br/>CI/CD + OIDC]
+    I[Docker Compose<br/>reproducible PostgreSQL]
+
+    A --> B
+    B --> C
+    B --> D
+    C --> E
+    E --> F
+    F --> G
+    H --> C
+    H --> E
+    I --> A
+```
+
+Data path:
+
+`PostgreSQL → Python incremental ingestion → Snowflake RAW/CONTROL → dbt STAGING → INTERMEDIATE → MARTS`
+
+## What is actually verified
+
+### End-to-end claim development
+
+`CLM-10042` is preserved through three source states:
+
+| State | Claim amount | Approved | Paid |
+| --- | ---: | ---: | ---: |
+| SUBMITTED | R8,500 | — | — |
+| APPROVED | R11,200 | R9,700 | — |
+| PAID | R11,200 | R9,700 | R9,700 |
+
+The live T4 run detected exactly one changed claim and one new payment. The immediate replay detected **0 candidates / 0 inserts across all five source tables**.
+
+### Historical customer change
+
+A real customer attribute change was propagated:
+
+- historical: `CUS-00001` — Gauteng
+- current: `CUS-00001` — Western Cape
+
+`DIM_CUSTOMER_SCD2` contains one closed historical row and one current row.
+
+### Controlled failure and recovery
+
+The reliability suite deliberately proves failure handling:
+
+- invalid payment date → dbt test fails with exactly one bad row
+- repair → incremental reload → dbt test passes
+- deliberately late claim → normal watermark scan misses it
+- reconciliation/backfill → missing claim recovered exactly once
+- backfill replay → zero duplicates
+- soft delete → RAW operation becomes `DELETE`
+- deleted claim disappears from `FCT_CLAIMS`
+- final no-change replay → zero extracted / zero inserted
+
+See [docs/reliability.md](docs/reliability.md).
+
+## dbt model
+
+The live dbt project contains:
+
+- 5 staging current-state models
+- 2 intermediate models
+- 4 marts
+- 1 backfill-safe incremental claim-event model
+- 1 customer SCD2
+- 56 data tests
+
+Verified result:
+
+`PASS=67 WARN=0 ERROR=0 SKIP=0`
+
+`INT_CLAIM_EVENTS` currently contains all **8** RAW claim versions. The focal claim `CLM-10042` contributes exactly **3** of those events: `SUBMITTED → APPROVED → PAID`.
+
+dbt documentation artifacts (`manifest.json`, `run_results.json`, `catalog.json`, `index.html`) are generated in CI.
+
+## Ingestion design
+
+Python ingestion implements:
+
+- composite `(updated_at, source_pk)` watermarks
+- deterministic canonical JSON serialization
+- SHA-256 payload hashing
+- append-only RAW history
+- idempotent Snowflake MERGE
+- soft-delete mapping to `DELETE`
+- per-table structured logging
+- source/candidate/insert reconciliation
+- Snowflake batch audit records
+- explicit missing-primary-key recovery for late/backfilled rows
+
+The project intentionally demonstrates that a high-watermark alone is insufficient. Late-arriving data is handled by a reconciliation path instead of being silently lost.
+
+## Performance and cost evidence
+
+Verified Snowflake CI compute:
+
+- warehouse: `SNOWFLAKE_LEARNING_WH`
+- type: Standard
+- size: X-Small
+- auto-resume: enabled
+- auto-suspend: 300 seconds
+
+Current claim-event completeness:
+
+- RAW claim versions: 8
+- modeled claim events: 8
+- missing modeled events: 0
+- incremental no-op assertion: pass
+
+Snowflake EXPLAIN confirms the backfill-safe anti-join path and assigned 13,312 bytes across four partitions on the current tiny workload.
+
+No production benchmark or percentage speedup is claimed from this demo dataset.
+
+See [docs/performance_cost.md](docs/performance_cost.md).
+
+## CI/CD
+
+The consolidated Platform CI gate verifies:
+
+1. Python static checks and tests.
+2. A clean PostgreSQL 16 Docker startup.
+3. All five operational source tables.
+4. Referential relationships and PostgreSQL constraints.
+5. Snowflake OIDC authentication.
+6. Full dbt build and 56 tests.
+7. dbt docs generation.
+8. Trusted `CLM-10042` mart state.
+9. Preservation of its three-event history.
+
+Snowflake authentication uses short-lived GitHub OIDC workload identity. No Snowflake password is stored.
+
+## Engineering decisions
+
+Architecture decisions are recorded rather than left implicit:
+
+- [ADR 001 — Append-only RAW](docs/adr/001-append-only-raw.md)
+- [ADR 002 — Composite watermarks plus reconciliation](docs/adr/002-incremental-capture-and-reconciliation.md)
+- [ADR 003 — OIDC and secret boundaries](docs/adr/003-identity-and-secrets.md)
+- [ADR 004 — dbt layering and one intentional SCD2](docs/adr/004-dbt-layering-and-history.md)
+- [ADR 005 — Complexity must be earned](docs/adr/005-scope-cost-and-tooling.md)
+
+## Repository map
+
+```text
+src/insurance_platform/
+  ingestion.py                  CDC/incremental primitives
+  run_ingestion.py             live PostgreSQL → Snowflake runner
+  repair_initial_backfill.py   reconciliation/backfill recovery
+  reliability_scenarios.py     controlled failure scenarios
+
+infra/postgres/
+  init/001_schema.sql          reproducible operational schema
+  smoke_test.sql               Docker schema/constraint proof
+
+infra/snowflake/
+  deploy.sql                   RAW/CONTROL platform objects
+  verify_platform_objects.sql  state-independent deployment assertions
+  performance_evidence.sql     live query-plan/row-count evidence
+
+dbt/
+  models/staging/              typed current state
+  models/intermediate/         event history + reusable rollups
+  models/marts/                trusted facts/dimensions/portfolio mart
+  tests/                       business-rule tests
+
+docs/
+  source_contract.md
+  dbt_modeling.md
+  reliability.md
+  performance_cost.md
+  adr/
+```
+
+## Reproduce locally
+
+Requirements: Python 3.11+ and Docker.
+
+```bash
+python -m pip install -e ".[dev]"
+pytest -q
+
+docker compose up -d postgres
+docker compose exec -T postgres \
+  psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 \
+  < infra/postgres/smoke_test.sql
+docker compose down -v
+```
+
+The live PostgreSQL→Snowflake path additionally requires the repository `POSTGRES_DSN` secret and Snowflake workload-identity configuration. Credentials are not committed.
+
+See [docs/reproduction.md](docs/reproduction.md).
+
+## Known limitations
+
+This is a deliberately bounded engineering demonstration, not a claim of full production insurance infrastructure.
+
+- The live Snowflake trial uses the pre-existing `SNOWFLAKE_LEARNING_ROLE`; a production environment should use a dedicated least-privilege role.
+- Change capture is watermark/reconciliation based, not PostgreSQL WAL/logical replication.
+- The dataset is intentionally small; performance results are evidence of execution plans and correctness, not scale benchmarks.
+- The portfolio loss-ratio field is explicitly a proxy based on annualized current premium, not actuarial earned premium.
+- No scheduler/orchestrator is added because GitHub Actions is sufficient for this capability proof.
+- Kafka, Spark, Kubernetes, Terraform, dashboards and ML are intentionally excluded because the defined use case does not require them.
+
+## Demo
+
+For a concise walkthrough, use [docs/demo_script.md](docs/demo_script.md).
+
+Key live evidence:
+
+- [Platform CI](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/platform-ci.yml)
+- [Reliability Failure Suite](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml)
+- [dbt Build](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/dbt-build.yml)
+- [Performance Evidence](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/performance-evidence.yml)
+- [Snowflake Deploy](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/snowflake-deploy.yml)
