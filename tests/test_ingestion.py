@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 
@@ -57,3 +58,9 @@ def test_newest_watermark_uses_updated_at_then_pk():
 def test_reconciliation_invariants():
     assert Reconciliation(10, 2, 2).is_consistent
     assert not Reconciliation(2, 1, 2).is_consistent
+
+
+def test_payload_hash_supports_postgres_decimal_values():
+    payload = {"claim_amount": Decimal("11200.00"), "approved_amount": Decimal("9700.00")}
+    digest = payload_sha256(payload)
+    assert len(digest) == 64
