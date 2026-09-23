@@ -66,11 +66,13 @@ jobs:
               (SELECT COUNT(*) FROM PET_INSURANCE_INTERMEDIATE.INT_CLAIM_EVENTS) =
               (SELECT COUNT(*) FROM PET_INSURANCE_RAW.SOURCE_RECORDS WHERE LOWER(SOURCE_TABLE) = 'claims')
               AND
-              (SELECT COUNT(*) FROM PET_INSURANCE_RAW.SOURCE_RECORDS
-               WHERE LOWER(SOURCE_TABLE) = 'claims'
-                 AND RAW_RECORD_ID > (
-                   SELECT COALESCE(MAX(RAW_RECORD_ID), 0)
-                   FROM PET_INSURANCE_INTERMEDIATE.INT_CLAIM_EVENTS
+              (SELECT COUNT(*)
+               FROM PET_INSURANCE_RAW.SOURCE_RECORDS raw
+               WHERE LOWER(raw.SOURCE_TABLE) = 'claims'
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM PET_INSURANCE_INTERMEDIATE.INT_CLAIM_EVENTS existing
+                   WHERE existing.RAW_RECORD_ID = raw.RAW_RECORD_ID
                  )) = 0,
               1, 0
             ) AS INCREMENTAL_NOOP_ASSERTION;
