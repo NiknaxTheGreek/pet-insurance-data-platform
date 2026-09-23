@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: raw
+    database: SNOWFLAKE_LEARNING_DB
+    schema: PET_INSURANCE_RAW
+    description: Append-only ingestion landing area populated from PostgreSQL.
+    tables:
+      - name: source_records
+        identifier: SOURCE_RECORDS
+        description: Versioned source records with CDC metadata and VARIANT payloads.
+        columns:
+          - name: RAW_RECORD_ID
+            tests: [not_null, unique]
+          - name: SOURCE_TABLE
+            tests: [not_null]
+          - name: SOURCE_PK
+            tests: [not_null]
+          - name: SOURCE_UPDATED_AT
+            tests: [not_null]
+          - name: PAYLOAD_HASH
+            tests: [not_null]
+          - name: BATCH_ID
+            tests: [not_null]
