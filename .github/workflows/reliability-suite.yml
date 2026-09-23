@@ -15,6 +15,8 @@ permissions:
 jobs:
   reliability-suite:
     runs-on: ubuntu-latest
+    env:
+      LATE_CLAIM_ID: CLM-LATE-${{ github.run_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,6 +85,7 @@ jobs:
       - name: Insert deliberately late-arriving claim
         env:
           POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          LATE_CLAIM_ID: ${{ env.LATE_CLAIM_ID }}
         run: python -m insurance_platform.reliability_scenarios insert-late-claim
 
       - name: Run normal watermark ingestion
@@ -101,7 +104,7 @@ jobs:
             SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS LATE_CLAIM_WAS_MISSED_AS_EXPECTED
             FROM PET_INSURANCE_RAW.SOURCE_RECORDS
             WHERE SOURCE_TABLE = 'claims'
-              AND SOURCE_PK = 'CLM-LATE-10045';
+              AND SOURCE_PK = '$LATE_CLAIM_ID';
           " -x
 
       - name: Recover missing primary keys
@@ -142,7 +145,7 @@ jobs:
             SELECT 1 / IFF(COUNT(*) = 1, 1, 0) AS LATE_CLAIM_SINGLE_RAW_VERSION
             FROM PET_INSURANCE_RAW.SOURCE_RECORDS
             WHERE SOURCE_TABLE = 'claims'
-              AND SOURCE_PK = 'CLM-LATE-10045';
+              AND SOURCE_PK = '$LATE_CLAIM_ID';
 
             WITH current_claim AS (
               SELECT OPERATION, PAYLOAD:is_deleted::boolean AS IS_DELETED
@@ -165,21 +168,31 @@ jobs:
             FROM PET_INSURANCE_MARTS.FCT_CLAIMS
             WHERE CLAIM_ID = 'CLM-10043';
 
+            WITH latest_payment AS (
+              SELECT PAYLOAD:payment_date::date AS PAYMENT_DATE
+              FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+              WHERE SOURCE_TABLE = 'claim_payments'
+                AND SOURCE_PK = 'PAY-DQ-10043'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY SOURCE_UPDATED_AT DESC, RAW_RECORD_ID DESC
+              ) = 1
+            ),
+            latest_claim AS (
+              SELECT PAYLOAD:claim_date::date AS CLAIM_DATE
+              FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+              WHERE SOURCE_TABLE = 'claims'
+                AND SOURCE_PK = 'CLM-10043'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY SOURCE_UPDATED_AT DESC, RAW_RECORD_ID DESC
+              ) = 1
+            )
             SELECT 1 / IFF(
               COUNT(*) = 1
-              AND MAX(p.PAYLOAD:payment_date::date) >= MAX(c.PAYLOAD:claim_date::date),
+              AND MAX(PAYMENT_DATE) >= MAX(CLAIM_DATE),
               1, 0
             ) AS REPAIRED_PAYMENT_ASSERTION
-            FROM PET_INSURANCE_RAW.SOURCE_RECORDS p
-            JOIN PET_INSURANCE_RAW.SOURCE_RECORDS c
-              ON c.SOURCE_TABLE = 'claims'
-             AND c.SOURCE_PK = 'CLM-10043'
-            WHERE p.SOURCE_TABLE = 'claim_payments'
-              AND p.SOURCE_PK = 'PAY-DQ-10043'
-            QUALIFY ROW_NUMBER() OVER (
-              PARTITION BY p.SOURCE_PK
-              ORDER BY p.SOURCE_UPDATED_AT DESC, p.RAW_RECORD_ID DESC
-            ) = 1;
+            FROM latest_payment
+            CROSS JOIN latest_claim;
 
             WITH latest_five AS (
               SELECT ROWS_EXTRACTED, ROWS_INSERTED
