@@ -47,20 +47,20 @@ WHEN NOT MATCHED THEN INSERT (
 MERGE INTO PET_INSURANCE_CONTROL.INGESTION_BATCHES AS target
 USING (
     SELECT 'batch-001-t1' AS BATCH_ID,
-           TO_TIMESTAMP_TZ('2026-09-20T09:05:00Z') AS STARTED_AT,
-           TO_TIMESTAMP_TZ('2026-09-20T09:05:05Z') AS COMPLETED_AT,
+           CURRENT_TIMESTAMP() AS STARTED_AT,
+           CURRENT_TIMESTAMP() AS COMPLETED_AT,
            'SUCCESS' AS STATUS,
            1 AS ROWS_EXTRACTED,
            1 AS ROWS_INSERTED,
-           'Verified live PostgreSQL T1 claim state bootstrap' AS NOTES
+           'Snowflake bootstrap replay of verified live PostgreSQL T1 claim state' AS NOTES
     UNION ALL
     SELECT 'batch-002-claim-update',
-           TO_TIMESTAMP_TZ('2026-09-22T13:56:30Z'),
-           TO_TIMESTAMP_TZ('2026-09-22T13:56:35Z'),
+           CURRENT_TIMESTAMP(),
+           CURRENT_TIMESTAMP(),
            'SUCCESS',
            1,
            1,
-           'Verified live PostgreSQL T3 claim update bootstrap'
+           'Snowflake bootstrap replay of verified live PostgreSQL T3 claim update'
 ) AS source
 ON target.BATCH_ID = source.BATCH_ID
 WHEN NOT MATCHED THEN INSERT (
