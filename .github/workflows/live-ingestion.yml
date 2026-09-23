@@ -2,6 +2,11 @@ name: Live Incremental Ingestion
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-live-ingestion.trigger"
 
 permissions:
   id-token: write
