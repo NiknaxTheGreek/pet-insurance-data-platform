@@ -1,0 +1,90 @@
+USE ROLE SNOWFLAKE_LEARNING_ROLE;
+USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+MERGE INTO PET_INSURANCE_RAW.SOURCE_RECORDS AS target
+USING (
+    SELECT
+        'claims' AS SOURCE_TABLE,
+        'CLM-10042' AS SOURCE_PK,
+        TO_TIMESTAMP_TZ('2026-09-20T09:00:00Z') AS SOURCE_UPDATED_AT,
+        'UPSERT' AS OPERATION,
+        PARSE_JSON('{"approved_amount":null,"claim_amount":8500,"claim_date":"2026-09-20","claim_id":"CLM-10042","claim_status":"SUBMITTED","claim_type":"ILLNESS","pet_id":"PET-00001","policy_id":"POL-00001","updated_at":"2026-09-20T09:00:00Z"}') AS PAYLOAD,
+        '6be7e18781ae84e9775e94957c8f6e058099af35eb8ccdde27fb816fad389325' AS PAYLOAD_HASH,
+        'batch-001-t1' AS BATCH_ID
+    UNION ALL
+    SELECT
+        'claims',
+        'CLM-10042',
+        TO_TIMESTAMP_TZ('2026-09-22T13:56:00Z'),
+        'UPSERT',
+        PARSE_JSON('{"approved_amount":9700,"claim_amount":11200,"claim_date":"2026-09-20","claim_id":"CLM-10042","claim_status":"APPROVED","claim_type":"ILLNESS","pet_id":"PET-00001","policy_id":"POL-00001","updated_at":"2026-09-22T13:56:00Z"}'),
+        '67a7af8ff2f302f8b93c3973b9614d2e2e43ce72fe72be802b08afc259566232',
+        'batch-002-claim-update'
+) AS source
+ON  target.SOURCE_TABLE = source.SOURCE_TABLE
+AND target.SOURCE_PK = source.SOURCE_PK
+AND target.SOURCE_UPDATED_AT = source.SOURCE_UPDATED_AT
+AND target.PAYLOAD_HASH = source.PAYLOAD_HASH
+WHEN NOT MATCHED THEN INSERT (
+    SOURCE_TABLE,
+    SOURCE_PK,
+    SOURCE_UPDATED_AT,
+    OPERATION,
+    PAYLOAD,
+    PAYLOAD_HASH,
+    BATCH_ID
+) VALUES (
+    source.SOURCE_TABLE,
+    source.SOURCE_PK,
+    source.SOURCE_UPDATED_AT,
+    source.OPERATION,
+    source.PAYLOAD,
+    source.PAYLOAD_HASH,
+    source.BATCH_ID
+);
+
+MERGE INTO PET_INSURANCE_CONTROL.INGESTION_BATCHES AS target
+USING (
+    SELECT 'batch-001-t1' AS BATCH_ID,
+           TO_TIMESTAMP_TZ('2026-09-20T09:05:00Z') AS STARTED_AT,
+           TO_TIMESTAMP_TZ('2026-09-20T09:05:05Z') AS COMPLETED_AT,
+           'SUCCESS' AS STATUS,
+           1 AS ROWS_EXTRACTED,
+           1 AS ROWS_INSERTED,
+           'Verified live PostgreSQL T1 claim state bootstrap' AS NOTES
+    UNION ALL
+    SELECT 'batch-002-claim-update',
+           TO_TIMESTAMP_TZ('2026-09-22T13:56:30Z'),
+           TO_TIMESTAMP_TZ('2026-09-22T13:56:35Z'),
+           'SUCCESS',
+           1,
+           1,
+           'Verified live PostgreSQL T3 claim update bootstrap'
+) AS source
+ON target.BATCH_ID = source.BATCH_ID
+WHEN NOT MATCHED THEN INSERT (
+    BATCH_ID, STARTED_AT, COMPLETED_AT, STATUS,
+    ROWS_EXTRACTED, ROWS_INSERTED, NOTES
+) VALUES (
+    source.BATCH_ID, source.STARTED_AT, source.COMPLETED_AT, source.STATUS,
+    source.ROWS_EXTRACTED, source.ROWS_INSERTED, source.NOTES
+);
+
+MERGE INTO PET_INSURANCE_CONTROL.INGESTION_WATERMARKS AS target
+USING (
+    SELECT
+        'claims' AS SOURCE_TABLE,
+        TO_TIMESTAMP_TZ('2026-09-22T13:56:00Z') AS LAST_UPDATED_AT,
+        'CLM-10042' AS LAST_SOURCE_PK
+) AS source
+ON target.SOURCE_TABLE = source.SOURCE_TABLE
+WHEN MATCHED THEN UPDATE SET
+    LAST_UPDATED_AT = source.LAST_UPDATED_AT,
+    LAST_SOURCE_PK = source.LAST_SOURCE_PK,
+    UPDATED_AT = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN INSERT (
+    SOURCE_TABLE, LAST_UPDATED_AT, LAST_SOURCE_PK
+) VALUES (
+    source.SOURCE_TABLE, source.LAST_UPDATED_AT, source.LAST_SOURCE_PK
+);
