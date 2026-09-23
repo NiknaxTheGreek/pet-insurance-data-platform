@@ -6,7 +6,8 @@ on:
     branches:
       - main
     paths:
-      - "infra/snowflake/**"
+      - "infra/snowflake/deploy.sql"
+      - "infra/snowflake/verify_platform_objects.sql"
       - ".github/workflows/snowflake-deploy.yml"
 
 permissions:
@@ -44,23 +45,9 @@ jobs:
           SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
         run: snow sql -f infra/snowflake/deploy.sql -x
 
-      - name: Load verified PostgreSQL claim history
+      - name: Verify platform objects
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
           SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
-        run: snow sql -f infra/snowflake/load_verified_claim_history.sql -x
-
-      - name: Replay same load to prove idempotency
-        env:
-          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
-          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
-          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
-        run: snow sql -f infra/snowflake/load_verified_claim_history.sql -x
-
-      - name: Verify history, current state and watermark
-        env:
-          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
-          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
-          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
-        run: snow sql -f infra/snowflake/verify_claim_history.sql -x
+        run: snow sql -f infra/snowflake/verify_platform_objects.sql -x
