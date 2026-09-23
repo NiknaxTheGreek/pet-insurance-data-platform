@@ -1,2 +1,2 @@
-trigger: 2026-09-23T18:44:06Z
-reason: live-postgres-to-snowflake-ingestion
+trigger: 2026-09-23T19:33:00Z
+reason: retry-live-postgres-to-snowflake-after-decimal-fix
