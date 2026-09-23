@@ -1,0 +1,23 @@
+name: pet_insurance
+version: "1.0.0"
+config-version: 2
+
+profile: pet_insurance
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  pet_insurance:
+    staging:
+      +schema: PET_INSURANCE_STAGING
+      +materialized: view
+    intermediate:
+      +schema: PET_INSURANCE_INTERMEDIATE
+      +materialized: view
+    marts:
+      +schema: PET_INSURANCE_MARTS
+      +materialized: table
