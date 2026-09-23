@@ -1,0 +1,61 @@
+name: Initial Backfill Reconciliation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-initial-backfill.trigger"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Install ingestion runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+
+      - name: Repair missing source primary keys in RAW
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.repair_initial_backfill
+
+      - name: Verify RAW distinct source PK counts
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT SOURCE_TABLE, COUNT(DISTINCT SOURCE_PK) AS DISTINCT_PKS, COUNT(*) AS RAW_VERSIONS
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            GROUP BY SOURCE_TABLE
+            ORDER BY SOURCE_TABLE;
+          " -x
