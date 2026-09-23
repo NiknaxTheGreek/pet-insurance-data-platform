@@ -30,7 +30,7 @@ jobs:
 
       - name: Verify Snowflake identity
         env:
-          SNOWFLAKE_ACCOUNT: HC48216
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
           SNOWFLAKE_ROLE: PET_INSURANCE_CICD_ROLE
         run: |
@@ -39,7 +39,7 @@ jobs:
 
       - name: Deploy Snowflake platform objects
         env:
-          SNOWFLAKE_ACCOUNT: HC48216
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
           SNOWFLAKE_ROLE: PET_INSURANCE_CICD_ROLE
         run: snow sql -f infra/snowflake/deploy.sql -x
