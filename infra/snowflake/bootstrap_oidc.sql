@@ -1,5 +1,6 @@
 -- One-time Snowflake bootstrap.
--- Run once as ACCOUNTADMIN in Snowsight. Subsequent deployments use the least-privilege CI role.
+-- Run as ACCOUNTADMIN in Snowsight. Safe to rerun: CREATE statements are idempotent
+-- and ALTER USER refreshes the GitHub OIDC trust on an existing service user.
 
 USE ROLE ACCOUNTADMIN;
 
@@ -19,6 +20,10 @@ GRANT CREATE SCHEMA ON DATABASE PET_INSURANCE_ANALYTICS TO ROLE PET_INSURANCE_CI
 
 CREATE USER IF NOT EXISTS PET_INSURANCE_GITHUB
   TYPE = SERVICE
+  DEFAULT_ROLE = PET_INSURANCE_CICD_ROLE
+  COMMENT = 'Secretless GitHub Actions service user for pet-insurance-data-platform';
+
+ALTER USER PET_INSURANCE_GITHUB SET
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
@@ -28,6 +33,8 @@ CREATE USER IF NOT EXISTS PET_INSURANCE_GITHUB
   COMMENT = 'Secretless GitHub Actions service user for pet-insurance-data-platform';
 
 GRANT ROLE PET_INSURANCE_CICD_ROLE TO USER PET_INSURANCE_GITHUB;
+
+DESCRIBE USER PET_INSURANCE_GITHUB;
 
 SELECT CURRENT_ACCOUNT() AS account_locator,
        CURRENT_ORGANIZATION_NAME() AS organization_name,
