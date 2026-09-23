@@ -7,6 +7,15 @@ name = "pet-insurance-data-platform"
 version = "0.1.0"
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+ingestion = [
+  "psycopg[binary]>=3.2,<4",
+  "snowflake-connector-python>=4.0,<5",
+]
+dev = [
+  "pytest>=8,<9",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
