@@ -1,0 +1,35 @@
+name: Snowflake OIDC Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  snowflake-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Snowflake CLI and obtain GitHub OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Verify Snowflake identity
+        env:
+          SNOWFLAKE_ACCOUNT: HC48216
+        run: |
+          snow connection test -x
+          snow sql -q "SELECT CURRENT_ACCOUNT(), CURRENT_REGION(), CURRENT_USER(), CURRENT_ROLE();" -x
+
+      - name: Deploy Snowflake platform objects
+        env:
+          SNOWFLAKE_ACCOUNT: HC48216
+        run: snow sql -f infra/snowflake/deploy.sql -x
