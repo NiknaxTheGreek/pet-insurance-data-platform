@@ -39,7 +39,7 @@ def inject_invalid_payment(cur) -> None:
         raise RuntimeError(f"{BAD_PAYMENT_CLAIM_ID} does not exist")
 
     cur.execute(
-        f"""
+        """
         INSERT INTO claim_payments (
             payment_id, claim_id, payment_date, payment_amount, payment_status,
             created_at, updated_at, is_deleted
@@ -69,7 +69,7 @@ def inject_invalid_payment(cur) -> None:
 
 def repair_invalid_payment(cur) -> None:
     cur.execute(
-        f"""
+        """
         UPDATE claim_payments p
         SET payment_date = c.claim_date,
             updated_at = GREATEST(CURRENT_TIMESTAMP, p.updated_at + INTERVAL '1 second')
