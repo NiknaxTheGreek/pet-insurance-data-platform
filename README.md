@@ -29,6 +29,9 @@ Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processi
   - `CUS-00001` historical row: Gauteng, closed at 2026-09-23 20:10Z.
   - `CUS-00001` current row: Western Cape, effective from 2026-09-23 20:10Z.
 - The customer change produced exactly 1 source candidate / 1 RAW insert; the immediate replay produced 0 inserts. SCD2 and claim-event idempotency assertions both passed.
+- Controlled reliability suite is green: dbt catches an intentionally invalid payment date, the source is repaired and retested, a late-arriving claim is recovered through reconciliation/backfill without duplication, and a source soft delete is propagated into RAW and removed from the trusted claim mart.
+- The checked-in PostgreSQL schema now matches the live text-ID contract and is exercised from scratch with PostgreSQL 16 in Docker on GitHub Actions.
+- Consolidated Platform CI is green across Python static checks/tests, Docker/PostgreSQL smoke validation, Snowflake OIDC, full dbt build, dbt docs generation, and trusted mart/history assertions.
 
 ## Data flow
 `PostgreSQL → Python incremental ingestion → Snowflake RAW/CONTROL → dbt STAGING → dbt INTERMEDIATE → dbt MARTS`
@@ -48,5 +51,9 @@ Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processi
 - `.github/workflows/dbt-build.yml` — dbt debug/build/docs/verification CI.
 - `.github/workflows/t4-demo.yml` — paid-claim CDC demonstration.
 - `.github/workflows/customer-scd2-demo.yml` — customer-history/SCD2 demonstration.
+- `.github/workflows/reliability-suite.yml` — controlled failure, recovery, late-arrival, and soft-delete proof.
+- `.github/workflows/platform-ci.yml` — consolidated Python + Docker/PostgreSQL + Snowflake/dbt CI gate.
+- `infra/postgres/smoke_test.sql` — clean-container schema, relationship, and constraint smoke test.
+- `docs/reliability.md` — verified failure/recovery evidence and CI results.
 
 See `docs/source_contract.md` and `docs/dbt_modeling.md` for implementation detail.
