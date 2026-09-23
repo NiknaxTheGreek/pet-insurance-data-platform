@@ -1,0 +1,198 @@
+name: Reliability Failure Suite
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-reliability-suite.trigger"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  reliability-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Install runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+          python -m pip install "dbt-snowflake==1.12.1"
+
+      - name: Inject invalid payment date
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.reliability_scenarios inject-invalid-payment
+
+      - name: Ingest invalid record
+        env: &runtime_env
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Prove dbt detects the bad record
+        env: *runtime_env
+        run: |
+          set +e
+          dbt test             --project-dir dbt             --profiles-dir dbt             --select assert_payment_not_before_claim             > /tmp/expected-dq-failure.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/expected-dq-failure.log
+          if [ "$code" -eq 0 ]; then
+            echo "::error::Expected payment-before-claim data-quality test to fail, but it passed."
+            exit 1
+          fi
+          grep -q "assert_payment_not_before_claim" /tmp/expected-dq-failure.log
+          echo "Expected data-quality failure detected."
+
+      - name: Repair invalid payment date
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.reliability_scenarios repair-invalid-payment
+
+      - name: Ingest repaired record
+        env: *runtime_env
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Prove repaired record passes the rule
+        env: *runtime_env
+        run: |
+          dbt test             --project-dir dbt             --profiles-dir dbt             --select assert_payment_not_before_claim
+
+      - name: Insert deliberately late-arriving claim
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.reliability_scenarios insert-late-claim
+
+      - name: Run normal watermark ingestion
+        env: *runtime_env
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Prove normal watermark scan did not see the late claim
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS LATE_CLAIM_WAS_MISSED_AS_EXPECTED
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = 'CLM-LATE-10045';
+          " -x
+
+      - name: Recover missing primary keys
+        env: *runtime_env
+        run: python -m insurance_platform.repair_initial_backfill
+
+      - name: Replay backfill to prove duplicate protection
+        env: *runtime_env
+        run: python -m insurance_platform.repair_initial_backfill
+
+      - name: Soft-delete a claim in PostgreSQL
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.reliability_scenarios soft-delete-claim
+
+      - name: Ingest soft delete
+        env: *runtime_env
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Rebuild all dbt models and tests
+        env: *runtime_env
+        run: dbt build --project-dir dbt --profiles-dir dbt --fail-fast
+
+      - name: Final no-change ingestion replay
+        env: *runtime_env
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Verify late arrival duplicate protection soft delete and clean replay
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT 1 / IFF(COUNT(*) = 1, 1, 0) AS LATE_CLAIM_SINGLE_RAW_VERSION
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = 'CLM-LATE-10045';
+
+            WITH current_claim AS (
+              SELECT OPERATION, PAYLOAD:is_deleted::boolean AS IS_DELETED
+              FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+              WHERE SOURCE_TABLE = 'claims'
+                AND SOURCE_PK = 'CLM-10043'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY SOURCE_UPDATED_AT DESC, RAW_RECORD_ID DESC
+              ) = 1
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(OPERATION) = 'DELETE'
+              AND MAX(IS_DELETED::int) = 1,
+              1, 0
+            ) AS SOFT_DELETE_RAW_ASSERTION
+            FROM current_claim;
+
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS SOFT_DELETE_MART_ASSERTION
+            FROM PET_INSURANCE_MARTS.FCT_CLAIMS
+            WHERE CLAIM_ID = 'CLM-10043';
+
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(p.PAYLOAD:payment_date::date) >= MAX(c.PAYLOAD:claim_date::date),
+              1, 0
+            ) AS REPAIRED_PAYMENT_ASSERTION
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS p
+            JOIN PET_INSURANCE_RAW.SOURCE_RECORDS c
+              ON c.SOURCE_TABLE = 'claims'
+             AND c.SOURCE_PK = 'CLM-10043'
+            WHERE p.SOURCE_TABLE = 'claim_payments'
+              AND p.SOURCE_PK = 'PAY-DQ-10043'
+            QUALIFY ROW_NUMBER() OVER (
+              PARTITION BY p.SOURCE_PK
+              ORDER BY p.SOURCE_UPDATED_AT DESC, p.RAW_RECORD_ID DESC
+            ) = 1;
+
+            WITH latest_five AS (
+              SELECT ROWS_EXTRACTED, ROWS_INSERTED
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE BATCH_ID LIKE '${{ github.run_id }}-%'
+                AND NOTES = 'watermark incremental PostgreSQL to Snowflake ingestion'
+              QUALIFY ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC) <= 5
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND SUM(ROWS_EXTRACTED) = 0
+              AND SUM(ROWS_INSERTED) = 0,
+              1, 0
+            ) AS FINAL_REPLAY_ASSERTION
+            FROM latest_five;
+          " -x
