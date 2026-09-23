@@ -4,7 +4,7 @@
 A pet insurer needs trustworthy analytics from mutable operational policy and claims data. The platform must preserve source changes, process them incrementally, and expose tested analytical models in Snowflake/dbt.
 
 ## Source-system contract
-PostgreSQL is the simulated mutable operational source. Five entities are intentionally sufficient for the capability proof.
+PostgreSQL is the simulated mutable operational source. Five entities are intentionally sufficient for the capability proof. Business identifiers are text keys matching the live demo convention (`CUS-*`, `PET-*`, `POL-*`, `CLM-*`, `PAY-*`) so the Dockerized source, seed generator, live Neon source, ingestion logic, and Snowflake RAW contract use the same identifier shape.
 
 | Entity | Grain | Primary key | Important relationships | Change behaviour |
 |---|---|---|---|---|
@@ -22,3 +22,8 @@ The eventual mart will support portfolio performance analysis including active p
 
 ## Explicit non-goals for v1
 No ML, fraud model, dashboard, Kafka, Airflow, Kubernetes, multi-product insurance model, or microservice architecture. Complexity must be earned by a required capability.
+
+
+## Reproducibility contract
+
+The checked-in PostgreSQL DDL is exercised in GitHub Actions with PostgreSQL 16 via Docker Compose. The smoke test boots a clean database, verifies all five tables, inserts one complete customer→pet→policy→claim→payment relationship chain using live-style string IDs, and proves the database rejects an invalid claim where approved amount exceeds claim amount.
