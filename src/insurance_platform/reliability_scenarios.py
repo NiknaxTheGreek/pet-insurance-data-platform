@@ -60,7 +60,7 @@ def inject_invalid_payment(cur) -> None:
             payment_amount = EXCLUDED.payment_amount,
             payment_status = EXCLUDED.payment_status,
             is_deleted = FALSE,
-            updated_at = {_touch_expression()}
+            updated_at = GREATEST(CURRENT_TIMESTAMP, claim_payments.updated_at + INTERVAL '1 second')
         """,
         (BAD_PAYMENT_ID, BAD_PAYMENT_CLAIM_ID),
     )
