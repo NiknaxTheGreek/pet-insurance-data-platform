@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: dim_policy
+    description: Current policy dimension enriched with customer and pet attributes.
+    columns:
+      - name: policy_id
+        data_tests: [not_null, unique]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: pet_id
+        data_tests: [not_null]
+
+  - name: dim_customer_scd2
+    description: Type-2 customer history derived from every customer version in append-only RAW.
+    columns:
+      - name: customer_id
+        data_tests: [not_null]
+      - name: effective_from
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+
+  - name: fct_claims
+    description: Current claim fact enriched with policy, customer, pet, and payment context.
+    columns:
+      - name: claim_id
+        data_tests: [not_null, unique]
+      - name: policy_id
+        data_tests: [not_null]
+      - name: claim_amount
+        data_tests: [not_null]
+
+  - name: mart_portfolio_performance
+    description: >
+      Portfolio performance by province, species, and plan. paid_loss_ratio_proxy uses
+      current monthly premium multiplied by 12 as an annualized premium proxy; it is a
+      portfolio demonstration metric, not actuarial earned premium.
+    columns:
+      - name: province
+        data_tests: [not_null]
+      - name: species
+        data_tests: [not_null]
+      - name: plan_type
+        data_tests: [not_null]
