@@ -5,36 +5,48 @@ A production-style data-engineering portfolio project demonstrating how mutable 
 ## Locked vertical slice
 Pet insurance only. Source entities: customers, pets, policies, claims, claim payments.
 
-## Engineering capabilities targeted
-Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processing/CDC concepts, idempotency, data quality, testing, observability/reconciliation, Docker, CI/CD, documentation, performance/cost awareness, and engineering judgement.
+## Engineering capabilities demonstrated
+Advanced SQL, PostgreSQL, Snowflake, dbt, Python ingestion, incremental processing/CDC concepts, idempotency, data quality, testing, observability/reconciliation, CI/CD, documentation, and engineering judgement.
 
 ## Current verified state
-- GitHub Actions authenticates to Snowflake with secretless OIDC.
-- Snowflake project schemas are deployed under `SNOWFLAKE_LEARNING_DB` using the verified `SNOWFLAKE_LEARNING_ROLE`.
-- RAW and CONTROL ingestion tables are live.
-- Verified PostgreSQL claim history for `CLM-10042` is present in Snowflake as two append-only versions:
-  - T1: R8,500, `SUBMITTED`, 2026-09-20 09:00Z.
-  - T3: R11,200, approved R9,700, `APPROVED`, 2026-09-22 13:56Z.
-- The same bootstrap load is replayed in CI; the replay inserts zero duplicate RAW rows.
-- SQL assertions verify exactly two historical versions and reconstruct the T3 state as current.
-- The claims watermark is verified at `2026-09-22 13:56:00Z / CLM-10042`.
-- The reusable Python ingestion core implements composite watermarks, canonical SHA-256 payload hashing, soft-delete operation mapping, in-batch deduplication and reconciliation.
-- Python ingestion/seed tests are green in GitHub Actions.
-- The live PostgreSQL→Snowflake workflow is active using the repository `POSTGRES_DSN` secret and Snowflake OIDC.
-- Initial live reconciliation repaired a bootstrap watermark gap without duplicating `CLM-10042`: Snowflake RAW now contains all 3 live claim PKs while preserving historical versions.
-- T4 is verified end-to-end: `CLM-10042` changed to `PAID`, payment `PAY-10042-T4` for R9,700 was inserted in PostgreSQL, and both changes were incrementally propagated to Snowflake.
-- Snowflake now preserves the `CLM-10042` state sequence `SUBMITTED → APPROVED → PAID` with amounts R8,500 → R11,200 and approved/paid amount R9,700.
-- The immediate no-change replay produced 0 candidates / 0 inserts for all five source tables, proving idempotent incremental behavior after T4.
-- Claims and claim-payment watermarks are both verified at `2026-09-23 19:40:00Z` for `CLM-10042` and `PAY-10042-T4` respectively.
+- GitHub Actions authenticates to Snowflake with short-lived OIDC workload identity; no Snowflake password is stored.
+- Snowflake RAW, STAGING, INTERMEDIATE, MARTS, and CONTROL schemas are live under `SNOWFLAKE_LEARNING_DB`.
+- The live PostgreSQL→Snowflake workflow uses a repository `POSTGRES_DSN` secret for the source and OIDC for Snowflake.
+- Python ingestion uses composite `updated_at + source_pk` watermarks, canonical SHA-256 payload hashes, append-only RAW history, soft-delete operation mapping, batch audit rows, reconciliation, and idempotent MERGE logic.
+- A bootstrap watermark gap was detected by reconciliation and repaired with a one-time missing-primary-key backfill. Snowflake contains all 3 live claim PKs without losing claim history.
+- `CLM-10042` is verified end-to-end through three historical versions:
+  - T1 — `SUBMITTED`, R8,500.
+  - T3 — `APPROVED`, R11,200 with R9,700 approved.
+  - T4 — `PAID`, R11,200 with R9,700 approved and R9,700 paid.
+- The T4 incremental run detected exactly 1 changed claim and 1 new payment; the immediate replay detected 0 candidates / 0 inserts across all five source tables.
+- dbt Core 1.12.5 with `dbt-snowflake 1.12.1` authenticates through the same OIDC identity.
+- The dbt project contains 11 models across staging, intermediate, and marts, including one incremental claim-event model and one customer SCD2 history dimension.
+- The verified dbt build completed with `PASS=67 WARN=0 ERROR=0 SKIP=0` across 11 models and 56 tests.
+- dbt docs artifacts (`manifest.json`, `run_results.json`, `catalog.json`, `index.html`) are generated in CI.
+- `FCT_CLAIMS` verifies `CLM-10042` as `PAID` with R11,200 claimed / R9,700 approved / R9,700 paid.
+- `INT_CLAIM_EVENTS` verifies the historical sequence `SUBMITTED → APPROVED → PAID` and remains at exactly 3 rows after repeated dbt/incremental runs.
+- A real customer attribute change was propagated from PostgreSQL through RAW and dbt:
+  - `CUS-00001` historical row: Gauteng, closed at 2026-09-23 20:10Z.
+  - `CUS-00001` current row: Western Cape, effective from 2026-09-23 20:10Z.
+- The customer change produced exactly 1 source candidate / 1 RAW insert; the immediate replay produced 0 inserts. SCD2 and claim-event idempotency assertions both passed.
 
-## Repository paths
+## Data flow
+`PostgreSQL → Python incremental ingestion → Snowflake RAW/CONTROL → dbt STAGING → dbt INTERMEDIATE → dbt MARTS`
+
+## Key repository paths
 - `src/insurance_platform/ingestion.py` — reusable CDC/incremental primitives.
 - `src/insurance_platform/run_ingestion.py` — live PostgreSQL→Snowflake runner.
+- `src/insurance_platform/repair_initial_backfill.py` — reconciliation-driven initial backfill repair.
 - `infra/snowflake/deploy.sql` — RAW/CONTROL platform objects.
-- `infra/snowflake/load_verified_claim_history.sql` — deterministic T1/T3 bootstrap replay.
-- `infra/snowflake/verify_claim_history.sql` — history/current-state assertions.
-- `.github/workflows/snowflake-deploy.yml` — Snowflake OIDC deploy + replay verification.
-- `.github/workflows/live-ingestion.yml` — live incremental ingestion.
-- `.github/workflows/python-tests.yml` — Python CI.
+- `dbt/models/staging/` — current-state typed source models.
+- `dbt/models/intermediate/int_claim_events.sql` — incremental historical claim-event model.
+- `dbt/models/intermediate/int_policy_claims.sql` — policy-level claim/payment rollup.
+- `dbt/models/marts/fct_claims.sql` — trusted current claim fact.
+- `dbt/models/marts/dim_policy.sql` — current policy dimension.
+- `dbt/models/marts/dim_customer_scd2.sql` — Type-2 customer history.
+- `dbt/models/marts/mart_portfolio_performance.sql` — portfolio performance mart.
+- `.github/workflows/dbt-build.yml` — dbt debug/build/docs/verification CI.
+- `.github/workflows/t4-demo.yml` — paid-claim CDC demonstration.
+- `.github/workflows/customer-scd2-demo.yml` — customer-history/SCD2 demonstration.
 
-See `docs/source_contract.md` for the v1 source contract.
+See `docs/source_contract.md` and `docs/dbt_modeling.md` for implementation detail.
