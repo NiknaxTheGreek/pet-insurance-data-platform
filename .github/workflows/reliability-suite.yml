@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LATE_CLAIM_ID: CLM-LATE-${{ github.run_id }}
+      LATE_EXISTING_CLAIM_ID: CLM-E-${{ github.run_number }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,17 +84,17 @@ jobs:
         run: |
           dbt test             --project-dir dbt             --profiles-dir dbt             --select assert_payment_not_before_claim
 
-      - name: Insert deliberately late-arriving claim
+      - name: Insert deliberately late new claim
         env:
           POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
           LATE_CLAIM_ID: ${{ env.LATE_CLAIM_ID }}
         run: python -m insurance_platform.reliability_scenarios insert-late-claim
 
-      - name: Run normal watermark ingestion
+      - name: Run normal watermark ingestion for late new claim
         env: *runtime_env
         run: python -m insurance_platform.run_ingestion
 
-      - name: Prove normal watermark scan did not see the late claim
+      - name: Prove watermark scan missed the late new claim
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
@@ -101,19 +103,128 @@ jobs:
           snow sql -q "
             USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
             USE DATABASE SNOWFLAKE_LEARNING_DB;
-            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS LATE_CLAIM_WAS_MISSED_AS_EXPECTED
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS LATE_NEW_CLAIM_MISSED_AS_EXPECTED
             FROM PET_INSURANCE_RAW.SOURCE_RECORDS
             WHERE SOURCE_TABLE = 'claims'
               AND SOURCE_PK = '$LATE_CLAIM_ID';
           " -x
 
-      - name: Recover missing primary keys
+      - name: Reconcile full current source state
         env: *runtime_env
-        run: python -m insurance_platform.repair_initial_backfill
+        run: python -m insurance_platform.reconcile_source_state
 
-      - name: Replay backfill to prove duplicate protection
+      - name: Replay reconciliation to prove duplicate protection
         env: *runtime_env
-        run: python -m insurance_platform.repair_initial_backfill
+        run: python -m insurance_platform.reconcile_source_state
+
+      - name: Verify late new claim recovered once
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT 1 / IFF(COUNT(*) = 1, 1, 0) AS LATE_NEW_CLAIM_RECOVERED_ONCE
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$LATE_CLAIM_ID';
+          " -x
+
+      - name: Insert existing-key late claim baseline
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          LATE_EXISTING_CLAIM_ID: ${{ env.LATE_EXISTING_CLAIM_ID }}
+        run: python -m insurance_platform.reliability_scenarios insert-late-existing-claim
+
+      - name: Prove normal ingestion misses existing-key late baseline
+        env: *runtime_env
+        run: |
+          python -m insurance_platform.run_ingestion
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS EXISTING_KEY_BASELINE_MISSED
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$LATE_EXISTING_CLAIM_ID';
+          " -x
+
+      - name: Reconcile existing-key late baseline
+        env: *runtime_env
+        run: python -m insurance_platform.reconcile_source_state
+
+      - name: Mutate same claim behind the watermark
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          LATE_EXISTING_CLAIM_ID: ${{ env.LATE_EXISTING_CLAIM_ID }}
+        run: python -m insurance_platform.reliability_scenarios mutate-late-existing-claim
+
+      - name: Prove normal ingestion misses late version of existing key
+        env: *runtime_env
+        run: |
+          python -m insurance_platform.run_ingestion
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND COUNT_IF(PAYLOAD:claim_amount::NUMBER = 2100) = 1,
+              1, 0
+            ) AS EXISTING_KEY_NEW_VERSION_MISSED
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$LATE_EXISTING_CLAIM_ID';
+          " -x
+
+      - name: Reconcile late version of existing key
+        env: *runtime_env
+        run: python -m insurance_platform.reconcile_source_state
+
+      - name: Replay existing-key reconciliation
+        env: *runtime_env
+        run: python -m insurance_platform.reconcile_source_state
+
+      - name: Verify both existing-key versions are preserved exactly once
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT 1 / IFF(
+              COUNT(*) = 2
+              AND COUNT_IF(PAYLOAD:claim_amount::NUMBER = 2100) = 1
+              AND COUNT_IF(PAYLOAD:claim_amount::NUMBER = 2600) = 1,
+              1, 0
+            ) AS EXISTING_KEY_LATE_VERSION_ASSERTION
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$LATE_EXISTING_CLAIM_ID';
+
+            WITH current_version AS (
+              SELECT
+                SOURCE_UPDATED_AT,
+                PAYLOAD:claim_amount::NUMBER AS CLAIM_AMOUNT
+              FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+              WHERE SOURCE_TABLE = 'claims'
+                AND SOURCE_PK = '$LATE_EXISTING_CLAIM_ID'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY SOURCE_UPDATED_AT DESC, RAW_RECORD_ID DESC
+              ) = 1
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(CLAIM_AMOUNT) = 2600
+              AND MAX(SOURCE_UPDATED_AT) = TIMESTAMP_TZ '2026-09-21 14:00:00+00',
+              1, 0
+            ) AS EXISTING_KEY_CURRENT_VERSION_ASSERTION
+            FROM current_version;
+          " -x
 
       - name: Soft-delete a claim in PostgreSQL
         env:
@@ -132,7 +243,7 @@ jobs:
         env: *runtime_env
         run: python -m insurance_platform.run_ingestion
 
-      - name: Verify late arrival duplicate protection soft delete and clean replay
+      - name: Verify all reliability outcomes
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
@@ -141,11 +252,6 @@ jobs:
           snow sql -q "
             USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
             USE DATABASE SNOWFLAKE_LEARNING_DB;
-
-            SELECT 1 / IFF(COUNT(*) = 1, 1, 0) AS LATE_CLAIM_SINGLE_RAW_VERSION
-            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
-            WHERE SOURCE_TABLE = 'claims'
-              AND SOURCE_PK = '$LATE_CLAIM_ID';
 
             WITH current_claim AS (
               SELECT OPERATION, PAYLOAD:is_deleted::boolean AS IS_DELETED
@@ -197,7 +303,7 @@ jobs:
             WITH latest_five AS (
               SELECT ROWS_EXTRACTED, ROWS_INSERTED
               FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
-              WHERE BATCH_ID LIKE '${{ github.run_id }}-%'
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
                 AND NOTES = 'watermark incremental PostgreSQL to Snowflake ingestion'
               QUALIFY ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC) <= 5
             )
@@ -208,4 +314,18 @@ jobs:
               1, 0
             ) AS FINAL_REPLAY_ASSERTION
             FROM latest_five;
+
+            WITH latest_reconciliation AS (
+              SELECT ROWS_INSERTED
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+                AND NOTES LIKE 'full-state reconciliation%'
+              QUALIFY ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC) <= 5
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND SUM(ROWS_INSERTED) = 0,
+              1, 0
+            ) AS RECONCILIATION_REPLAY_ASSERTION
+            FROM latest_reconciliation;
           " -x
