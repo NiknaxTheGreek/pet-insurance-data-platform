@@ -40,7 +40,11 @@ A few of the verified scenarios include:
 - recovery of deliberately late-arriving data that a normal high-watermark scan misses;
 - soft-delete propagation from PostgreSQL through Snowflake into the trusted mart;
 - a real customer attribute change producing SCD2 history;
-- a consolidated GitHub Actions gate covering Python tests, a clean PostgreSQL Docker environment, Snowflake OIDC and a full dbt build.
+- a real Estuary WAL/logical-replication path that captured INSERT → UPDATE → physical DELETE and materialized all three events into Snowflake;
+- transaction rollback after RAW MERGE but before watermark advancement;
+- additive schema evolution plus explicit breaking-change rejection;
+- a controlled 82,956-row benchmark;
+- consolidated GitHub Actions gates for Python, Docker/PostgreSQL, Snowflake, dbt, security and Dagster orchestration.
 
 The README contains the architecture and evidence, and `docs/demo_script.md` gives a five-minute technical walkthrough.
 
@@ -49,7 +53,7 @@ Nicholas
 
 ## 30-second explanation
 
-“I built a production-style pet-insurance data platform around a mutable PostgreSQL source. Python incrementally captures changes into append-only Snowflake RAW, with watermarks, payload hashing, batch audits and reconciliation. dbt then reconstructs current state, preserves history where needed and exposes claims and portfolio marts. The important part is that I tested failure conditions as well as the happy path: duplicate replays, late-arriving data, invalid business values, soft deletes and an SCD2 change are all executed and verified in GitHub Actions.”
+“I built a production-style pet-insurance data platform around a mutable PostgreSQL source. The custom Python path uses batched incremental capture, append-only Snowflake RAW, payload hashing, transactional watermark updates and full-state reconciliation. dbt reconstructs current state and exposes tested marts. I also implemented a second, real CDC path using Neon logical replication and Estuary Flow: a disposable claim was inserted, updated, physically deleted and all three WAL events were materialized into Snowflake. The project therefore proves both the mechanics of incremental engineering and a managed log-based CDC approach.”
 
 ## Two-minute explanation
 
@@ -143,8 +147,9 @@ Say:
 Mention:
 
 - 11 models
-- 56 tests
-- 67/67 build nodes passing
+- 67 dbt tests
+- 78/78 dbt build nodes passing
+- 24 Python tests passing
 
 ### 3:45–4:30 — Show CI/reproducibility
 
@@ -178,7 +183,9 @@ Close with:
 
 Answer:
 
-“It demonstrates CDC semantics, but it is not log-based CDC. The current implementation uses source `updated_at + primary key` watermarks, operation metadata, version preservation and reconciliation. For a production system with higher change volume I would evaluate PostgreSQL logical replication/WAL, Snowflake Streams or another log-based capture mechanism. I deliberately document that boundary rather than calling watermark polling true WAL CDC.”
+“There are two separate paths. The custom Python implementation is not WAL-based CDC; it uses a composite `updated_at + primary key` watermark plus payload hashing, version preservation and full-state reconciliation. I keep that distinction explicit because it demonstrates the mechanics and failure modes directly.
+
+Separately, I implemented and executed a real managed CDC path with Neon logical replication and Estuary Flow. Neon is running with `wal_level=logical`; Estuary captures the PostgreSQL WAL stream in History Mode; a disposable claim produced create, update and physical-delete events; and Snowflake contains exactly one `c`, one `u` and one `d` event for that claim. So I would call the Estuary path true log-based CDC, but not the custom watermark path.”
 
 ### “Why not Airflow?”
 
@@ -226,7 +233,9 @@ Answer:
 
 Answer:
 
-“I would first replace the trial learning role with a dedicated least-privilege Snowflake role and environment-specific workload identity. Depending on volume and latency requirements, I would evaluate WAL/logical replication or managed CDC, formal orchestration, stronger schema evolution/data-contract enforcement, environment promotion and representative load testing. I would add those because of operational requirements, not by default.”
+“I would separate the trial identities first. The Estuary proof currently reuses the Neon owner role and the existing Snowflake GitHub service user / learning role because this is a bounded trial. In production I would create dedicated least-privilege source and destination identities, environment-specific workload identities, formal promotion between environments and explicit credential rotation.
+
+The project already proves both watermark/reconciliation and WAL-based Estuary CDC, plus Dagster orchestration, schema contracts and controlled scale testing. What I would add next would depend on real SLAs and volume: stronger environment isolation, production monitoring/on-call ownership, representative load testing and any additional orchestration or streaming infrastructure only where justified.”
 
 ### “What was the most important bug you found?”
 
@@ -258,9 +267,11 @@ Prefer:
 1. README
 2. Platform CI
 3. Reliability Failure Suite
-4. T4 Paid Claim Demo
-5. dbt models
-6. ADRs
-7. Performance/cost evidence
+4. Estuary WAL CDC evidence
+5. Transaction Atomicity
+6. Scale Benchmark
+7. dbt models
+8. ADRs
+9. Performance/cost evidence
 
 The reviewer should not need the ZIP unless they want an offline copy.
