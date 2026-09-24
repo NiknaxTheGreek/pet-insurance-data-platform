@@ -6,11 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "pet-insurance-data-platform"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = [
+  "PyYAML==6.0.2",
+]
 
 [project.optional-dependencies]
 ingestion = [
   "psycopg[binary]==3.3.6",
-  "PyYAML==6.0.2",
   "snowflake-connector-python==4.7.5",
 ]
 dev = [
