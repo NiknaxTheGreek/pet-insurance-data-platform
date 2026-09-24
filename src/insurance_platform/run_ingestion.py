@@ -137,9 +137,9 @@ def _stage_records(
     sql = f"""
         INSERT INTO {STAGE_TABLE} (
             BATCH_ID, SOURCE_TABLE, SOURCE_PK, SOURCE_UPDATED_AT,
-            OPERATION, PAYLOAD, PAYLOAD_JSON, PAYLOAD_HASH
+            OPERATION, PAYLOAD_JSON, PAYLOAD_HASH
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
     rows = [
         (
@@ -155,7 +155,6 @@ def _stage_records(
     ]
     for batch in chunked(rows, batch_size):
         sf_cursor.executemany(sql, batch)
-
 
 def _count_unrepresented_staged(sf_cursor, batch_id: str) -> int:
     sf_cursor.execute(
