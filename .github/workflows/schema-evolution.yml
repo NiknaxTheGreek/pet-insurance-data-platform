@@ -45,6 +45,12 @@ jobs:
       - name: Baseline contract must pass
         run: python -m insurance_platform.validate_contracts
 
+      - name: Seed deterministic smoke fixture
+        run: |
+          docker compose exec -T postgres \
+            psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 \
+            < infra/postgres/smoke_test.sql
+
       - name: Add non-breaking source column
         run: |
           docker compose exec -T postgres psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 <<'SQL'
