@@ -23,3 +23,10 @@ def test_claim_amount_business_rule(tmp_path):
     generate(tmp_path,n_customers=100)
     for row in read_rows(tmp_path/"claims.csv"):
         if row["approved_amount"]: assert 0<=float(row["approved_amount"])<=float(row["claim_amount"])
+
+
+def test_generated_customer_pii_fields_are_present_and_synthetic(tmp_path):
+    generate(tmp_path, n_customers=5)
+    customers = read_rows(tmp_path / "customers.csv")
+    assert all(row["email"].endswith("@example.invalid") for row in customers)
+    assert all("phone" in row and "postal_code" in row for row in customers)
