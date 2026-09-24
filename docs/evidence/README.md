@@ -12,6 +12,9 @@ The project treats a claim as verified only when it maps to code plus an execute
 | Security: gitleaks + dependency audit + static gate | 35990015486 | PASS |
 | Consolidated Platform CI | 35990015280 | PASS |
 | Dagster orchestration proof | 35990181134 | PASS |
+| Estuary WAL CDC source C/U/D | 36033857733 | PASS |
+| Estuary → Snowflake materialization | 36040696100 | PASS |
+| Estuary C/U/D history in Snowflake | 36041150766 | PASS |
 
 The evidence files in this directory contain the scenario, expected result, actual result and verification mechanism. They do not substitute screenshots for executable proof.
 
@@ -20,7 +23,7 @@ The evidence files in this directory contain the scenario, expected result, actu
 
 | Integration | Status | Evidence |
 | --- | --- | --- |
-| Estuary provider execution | BLOCKED / NOT VERIFIED | Neon readiness run 36009597153 proves wal_level=replica; Estuary login unavailable |
+| Estuary provider execution | VERIFIED | WAL/logical replication + INSERT/UPDATE/physical DELETE + Snowflake materialization all passed; see `estuary_cdc.md` |
 | GCP/GCS provider execution | BLOCKED / NOT VERIFIED | repo package + deterministic export test exist; GCP login/project unavailable |
 
-These rows must not be promoted to PASS until provider-side execution is completed.
+Only the GCP row remains blocked.
