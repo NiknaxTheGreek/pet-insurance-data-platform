@@ -104,23 +104,12 @@ def write_capture_spec(path: Path) -> None:
 
 def add_snowflake_materialization(path: Path) -> None:
     prefix = required("ESTUARY_PREFIX").rstrip("/")
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if path.exists():
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    else:
+        payload = {}
 
-    capture_name = f"{prefix}/pet-insurance/source-neon"
-    capture = payload["captures"][capture_name]
-    claims_binding = next(
-        (
-            binding
-            for binding in capture.get("bindings", [])
-            if binding.get("resource", {}).get("namespace") == "public"
-            and binding.get("resource", {}).get("stream") == "claims"
-        ),
-        None,
-    )
-    if claims_binding is None:
-        raise RuntimeError("flowctl discover did not produce a public.claims binding")
-
-    collection_name = claims_binding["target"]
+    collection_name = f"{prefix}/pet-insurance/public/claims"
     materialization_name = f"{prefix}/pet-insurance/materialize-snowflake"
 
     payload.setdefault("materializations", {})[materialization_name] = {
@@ -145,14 +134,23 @@ def add_snowflake_materialization(path: Path) -> None:
         },
         "bindings": [
             {
-                "resource": {"table": "CLAIMS"},
+                "resource": {
+                    "table": "CLAIMS",
+                    "delta_updates": True,
+                },
                 "source": collection_name,
+                "fields": {
+                    "recommended": 2,
+                    "require": {
+                        "flow_document": {},
+                    },
+                },
             }
         ],
     }
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
