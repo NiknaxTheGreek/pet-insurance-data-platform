@@ -9,6 +9,8 @@ on:
       - "src/**"
       - "tests/**"
       - "pyproject.toml"
+      - "contracts/**"
+      - "contracts/**"
       - ".github/workflows/python-tests.yml"
   pull_request:
     paths:
