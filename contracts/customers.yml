@@ -4,31 +4,13 @@ source_table: customers
 primary_key: customer_id
 allow_additive_columns: true
 columns:
-  customer_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
-  first_name:
-    data_type: text
-    nullable: false
-    classification: pii_direct
-  last_name:
-    data_type: text
-    nullable: false
-    classification: pii_direct
-  province:
-    data_type: text
-    nullable: false
-    classification: quasi_identifier
-  created_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  updated_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  is_deleted:
-    data_type: boolean
-    nullable: false
-    classification: operational
+  customer_id: {data_type: character varying, nullable: false, classification: internal_identifier}
+  first_name: {data_type: character varying, nullable: false, classification: pii_direct}
+  last_name: {data_type: character varying, nullable: false, classification: pii_direct}
+  email: {data_type: character varying, nullable: false, classification: pii_direct}
+  phone: {data_type: character varying, nullable: true, classification: pii_direct}
+  province: {data_type: character varying, nullable: false, classification: quasi_identifier}
+  postal_code: {data_type: character varying, nullable: true, classification: quasi_identifier}
+  created_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  updated_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  is_deleted: {data_type: boolean, nullable: false, classification: operational}
