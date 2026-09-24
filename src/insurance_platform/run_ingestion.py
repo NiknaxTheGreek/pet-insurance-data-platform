@@ -385,10 +385,10 @@ def _process_table(pg_cursor, sf_cursor, spec: TableSpec) -> Reconciliation:
         watermark_before=watermark_before,
         notes="watermark incremental PostgreSQL to Snowflake ingestion",
     )
-    _stage_records(sf_cursor, candidates, batch_id)
-
     attempts_used = 0
     try:
+        _stage_records(sf_cursor, candidates, batch_id)
+
         def operation(attempt: int) -> Reconciliation:
             nonlocal attempts_used
             attempts_used = attempt
