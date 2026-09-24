@@ -1,0 +1,87 @@
+name: GCP GCS Backfill Proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gcs-backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate required repository variables
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        run: |
+          test -n "$GCP_PROJECT_ID"
+          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
+          test -n "$GCP_SERVICE_ACCOUNT"
+          test -n "$GCS_BUCKET"
+
+      - name: Install locked runtime
+        run: python -m pip install -r requirements/ci.lock.txt
+
+      - name: Export deterministic PostgreSQL backfill
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.gcp_backfill_export
+
+      - id: auth
+        name: Authenticate GitHub to Google Cloud with WIF
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Upload backfill and manifest to private GCS
+        run: |
+          gcloud storage cp work/gcp_backfill/claims_backfill.csv             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill.csv"
+          gcloud storage cp work/gcp_backfill/claims_backfill_manifest.json             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill_manifest.json"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Load GCS object through Snowflake external stage
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        run: |
+          sed "s/__GCS_BUCKET__/$GCS_BUCKET/g" integrations/gcp/snowflake_gcs_load.sql > /tmp/gcs_load.sql
+          snow sql -f /tmp/gcs_load.sql -x
+
+      - name: Reconcile source manifest with Snowflake backfill
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.gcp_backfill_verify
+
+      - name: Upload proof manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcp-backfill-evidence
+          path: work/gcp_backfill/claims_backfill_manifest.json
