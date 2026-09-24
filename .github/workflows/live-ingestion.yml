@@ -47,7 +47,7 @@ jobs:
           test -n "$POSTGRES_DSN" || (echo "::error::POSTGRES_DSN repository secret is required" && exit 1)
           python -m insurance_platform.run_ingestion
 
-      - name: Show latest ingestion audit
+      - name: Verify ingestion audit and health
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
@@ -56,8 +56,49 @@ jobs:
           snow sql -q "
             USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
             USE DATABASE SNOWFLAKE_LEARNING_DB;
-            SELECT BATCH_ID, STATUS, ROWS_EXTRACTED, ROWS_INSERTED, NOTES
+
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND COUNT_IF(STATUS = 'SUCCESS') = 5
+              AND COUNT_IF(RECONCILIATION_STATUS = 'CONSISTENT') = 5,
+              1, 0
+            ) AS CURRENT_RUN_AUDIT_ASSERTION
             FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
-            ORDER BY STARTED_AT DESC
-            LIMIT 10;
+            WHERE GITHUB_RUN_ID = '${{ github.run_id }}';
+
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS STAGE_CLEANUP_ASSERTION
+            FROM PET_INSURANCE_CONTROL.INGESTION_STAGE
+            WHERE BATCH_ID LIKE '${{ github.run_id }}-%';
+
+            SELECT
+              SOURCE_TABLE,
+              LATEST_STATUS,
+              LAST_SUCCESS_AT,
+              LAST_FAILURE_AT,
+              SOURCE_WATERMARK_AT,
+              LAST_SOURCE_ROWS,
+              LAST_ROWS_EXTRACTED,
+              LAST_ROWS_INSERTED,
+              LAST_DURATION_MS,
+              LAST_RETRY_COUNT,
+              LAST_RECONCILIATION_STATUS,
+              LAST_ERROR_CLASS
+            FROM PET_INSURANCE_CONTROL.INGESTION_HEALTH
+            ORDER BY SOURCE_TABLE;
+
+            SELECT
+              BATCH_ID,
+              SOURCE_TABLE,
+              STATUS,
+              SOURCE_ROWS,
+              ROWS_EXTRACTED,
+              ROWS_INSERTED,
+              DURATION_MS,
+              RETRY_COUNT,
+              RECONCILIATION_STATUS,
+              WATERMARK_BEFORE_AT,
+              WATERMARK_AFTER_AT
+            FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+            WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+            ORDER BY STARTED_AT;
           " -x
