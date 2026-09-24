@@ -1,0 +1,67 @@
+name: Estuary Neon Capture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-capture.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-capture:
+    runs-on: ubuntu-latest
+    env:
+      ESTUARY_PREFIX: Private77
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locked project runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install -e . --no-deps
+
+      - name: Install flowctl
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/flowctl \
+            https://github.com/estuary/flow/releases/latest/download/flowctl-x86_64-linux
+          sudo chmod +x /usr/local/bin/flowctl
+          flowctl --version
+
+      - name: Generate isolated Neon capture specification
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: |
+          mkdir -p /tmp/estuary
+          python -m insurance_platform.estuary_flow_spec capture \
+            --output /tmp/estuary/flow.yaml
+
+      - name: Discover public.claims only
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: |
+          flowctl discover \
+            --source /tmp/estuary/flow.yaml \
+            --capture "$ESTUARY_PREFIX/pet-insurance/source-neon"
+
+      - name: Validate capture catalog
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: flowctl catalog test --source /tmp/estuary/flow.yaml
+
+      - name: Publish Neon CDC capture
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          flowctl catalog publish --source /tmp/estuary/flow.yaml --auto-approve
+          flowctl catalog list --prefix "$ESTUARY_PREFIX/pet-insurance"
