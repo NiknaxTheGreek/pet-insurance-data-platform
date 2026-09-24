@@ -106,6 +106,7 @@ jobs:
 
   snowflake-dbt:
     name: Snowflake dbt build
+    if: github.event_name != 'pull_request'
     needs: [python-quality, postgres-docker]
     runs-on: ubuntu-latest
     steps:
