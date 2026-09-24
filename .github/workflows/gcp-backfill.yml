@@ -29,8 +29,10 @@ jobs:
           test -n "$GCP_SERVICE_ACCOUNT"
           test -n "$GCS_BUCKET"
 
-      - name: Install locked runtime
-        run: python -m pip install -r requirements/ci.lock.txt
+      - name: Install locked project runtime
+        run: |
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install -e . --no-deps
 
       - name: Export deterministic PostgreSQL backfill
         env:
@@ -48,16 +50,71 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Verify GCP identity and bucket security
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+          gcloud storage buckets describe "gs://${{ vars.GCS_BUCKET }}"             --format="yaml(name,location,iamConfiguration.uniformBucketLevelAccess,iamConfiguration.publicAccessPrevention)"
+
       - name: Upload backfill and manifest to private GCS
         run: |
-          gcloud storage cp work/gcp_backfill/claims_backfill.csv             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill.csv"
-          gcloud storage cp work/gcp_backfill/claims_backfill_manifest.json             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill_manifest.json"
+          gcloud storage cp             work/gcp_backfill/claims_backfill.csv             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill.csv"
+          gcloud storage cp             work/gcp_backfill/claims_backfill_manifest.json             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill_manifest.json"
+          gcloud storage ls "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/"
 
       - name: Obtain Snowflake OIDC token
         uses: snowflakedb/snowflake-actions@v3
         with:
           use-oidc: true
           cli-version: "3.16.0"
+
+      - name: Read Snowflake-generated GCS service account
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: |
+          python - <<'PY'
+          import os
+          import snowflake.connector
+
+          conn = snowflake.connector.connect(
+              account=os.environ["SNOWFLAKE_ACCOUNT"],
+              user=os.environ["SNOWFLAKE_USER"],
+              role=os.environ["SNOWFLAKE_ROLE"],
+              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+              database=os.environ["SNOWFLAKE_DATABASE"],
+              authenticator="WORKLOAD_IDENTITY",
+              workload_identity_provider="OIDC",
+              token=os.environ["SNOWFLAKE_TOKEN"],
+          )
+          try:
+              with conn.cursor() as cur:
+                  cur.execute("DESC INTEGRATION PET_INSURANCE_GCS_INTEGRATION")
+                  columns = [d[0].lower() for d in cur.description]
+                  rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+              match = next(
+                  row for row in rows
+                  if str(row.get("property", "")).upper() == "STORAGE_GCP_SERVICE_ACCOUNT"
+              )
+              value = (
+                  match.get("property_value")
+                  or match.get("value")
+                  or match.get("property_default")
+              )
+              if not value:
+                  raise RuntimeError("Snowflake GCS service account value was empty")
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+                  handle.write(f"SNOWFLAKE_GCP_SERVICE_ACCOUNT={value}\n")
+              print("SNOWFLAKE_GCS_INTEGRATION_ASSERTION=PASS")
+          finally:
+              conn.close()
+          PY
+
+      - name: Grant Snowflake read access to proof bucket
+        run: |
+          gcloud storage buckets add-iam-policy-binding             "gs://${{ vars.GCS_BUCKET }}"             --member="serviceAccount:$SNOWFLAKE_GCP_SERVICE_ACCOUNT"             --role="roles/storage.objectViewer"
 
       - name: Load GCS object through Snowflake external stage
         env:
@@ -68,8 +125,7 @@ jobs:
           SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
           GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         run: |
-          sed "s/__GCS_BUCKET__/$GCS_BUCKET/g" integrations/gcp/snowflake_gcs_load.sql > /tmp/gcs_load.sql
-          snow sql -f /tmp/gcs_load.sql -x
+          snow sql             -f integrations/gcp/snowflake_gcs_load.sql             -D "role=$SNOWFLAKE_ROLE"             -D "warehouse=$SNOWFLAKE_WAREHOUSE"             -D "database=$SNOWFLAKE_DATABASE"             -D "bucket=$GCS_BUCKET"             -x
 
       - name: Reconcile source manifest with Snowflake backfill
         env:
