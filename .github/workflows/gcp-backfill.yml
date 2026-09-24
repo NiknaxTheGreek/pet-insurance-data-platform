@@ -2,6 +2,11 @@ name: GCP GCS Backfill Proof
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-gcp-backfill.trigger"
 
 permissions:
   contents: read
@@ -17,18 +22,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate required repository variables
-        env:
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
-          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
-        run: |
-          test -n "$GCP_PROJECT_ID"
-          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
-          test -n "$GCP_SERVICE_ACCOUNT"
-          test -n "$GCS_BUCKET"
-
       - name: Install locked project runtime
         run: |
           python -m pip install -r requirements/ci.lock.txt
@@ -43,9 +36,9 @@ jobs:
         name: Authenticate GitHub to Google Cloud with WIF
         uses: google-github-actions/auth@v3
         with:
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project_id: hallowed-key-394713
+          workload_identity_provider: projects/320455397479/locations/global/workloadIdentityPools/github-pet-insurance/providers/github
+          service_account: pet-insurance-github@hallowed-key-394713.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -53,13 +46,13 @@ jobs:
       - name: Verify GCP identity and bucket security
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
-          gcloud storage buckets describe "gs://${{ vars.GCS_BUCKET }}"             --format="yaml(name,location,iamConfiguration.uniformBucketLevelAccess,iamConfiguration.publicAccessPrevention)"
+          gcloud storage buckets describe "gs://hallowed-key-394713-pet-insurance-backfill"             --format="yaml(name,location,iamConfiguration.uniformBucketLevelAccess,iamConfiguration.publicAccessPrevention)"
 
       - name: Upload backfill and manifest to private GCS
         run: |
-          gcloud storage cp             work/gcp_backfill/claims_backfill.csv             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill.csv"
-          gcloud storage cp             work/gcp_backfill/claims_backfill_manifest.json             "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/claims_backfill_manifest.json"
-          gcloud storage ls "gs://${{ vars.GCS_BUCKET }}/pet-insurance-backfill/"
+          gcloud storage cp             work/gcp_backfill/claims_backfill.csv             "gs://hallowed-key-394713-pet-insurance-backfill/pet-insurance-backfill/claims_backfill.csv"
+          gcloud storage cp             work/gcp_backfill/claims_backfill_manifest.json             "gs://hallowed-key-394713-pet-insurance-backfill/pet-insurance-backfill/claims_backfill_manifest.json"
+          gcloud storage ls "gs://hallowed-key-394713-pet-insurance-backfill/pet-insurance-backfill/"
 
       - name: Obtain Snowflake OIDC token
         uses: snowflakedb/snowflake-actions@v3
@@ -114,7 +107,7 @@ jobs:
 
       - name: Grant Snowflake read access to proof bucket
         run: |
-          gcloud storage buckets add-iam-policy-binding             "gs://${{ vars.GCS_BUCKET }}"             --member="serviceAccount:$SNOWFLAKE_GCP_SERVICE_ACCOUNT"             --role="roles/storage.objectViewer"
+          gcloud storage buckets add-iam-policy-binding             "gs://hallowed-key-394713-pet-insurance-backfill"             --member="serviceAccount:$SNOWFLAKE_GCP_SERVICE_ACCOUNT"             --role="roles/storage.objectViewer"
 
       - name: Load GCS object through Snowflake external stage
         env:
@@ -123,7 +116,7 @@ jobs:
           SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
           SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
           SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
-          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          GCS_BUCKET: hallowed-key-394713-pet-insurance-backfill
         run: |
           snow sql             -f integrations/gcp/snowflake_gcs_load.sql             -D "role=$SNOWFLAKE_ROLE"             -D "warehouse=$SNOWFLAKE_WAREHOUSE"             -D "database=$SNOWFLAKE_DATABASE"             -D "bucket=$GCS_BUCKET"             -x
 
