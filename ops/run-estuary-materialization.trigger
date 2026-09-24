@@ -1,2 +1,2 @@
-trigger: 2026-09-24T17:31:00Z
-reason: rerun-estuary-materialization-with-public-key-artifact
+trigger: 2026-09-24T18:22:00Z
+reason: publish-estuary-snowflake-materialization-automated-jwt
