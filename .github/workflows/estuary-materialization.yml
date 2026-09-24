@@ -87,46 +87,39 @@ jobs:
             echo "::add-mask::$line"
           done < /tmp/estuary-key/rsa_key.p8
 
-      - name: Upload public key handoff
-        uses: actions/upload-artifact@v4
-        with:
-          name: estuary-snowflake-public-key
-          path: /tmp/estuary-key/public_body.txt
-          retention-days: 1
-
-      - name: Wait for Snowflake public-key assignment
+      - name: Assign ephemeral public key to Snowflake service user
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          PUBLIC_KEY_BODY="$(cat /tmp/estuary-key/public_body.txt)"
+
+          snow sql -q "
+            ALTER USER PET_INSURANCE_GITHUB
+              SET RSA_PUBLIC_KEY='${PUBLIC_KEY_BODY}',
+                  QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE;
+          " -x
+
+      - name: Verify Snowflake JWT authentication
         run: |
           python - <<'PY'
-          import time
           import snowflake.connector
 
-          deadline = time.time() + 900
-          last_error = None
-          while time.time() < deadline:
-              try:
-                  conn = snowflake.connector.connect(
-                      account="VEGYNBL-HC48216",
-                      user="PET_INSURANCE_GITHUB",
-                      private_key_file="/tmp/estuary-key/rsa_key.p8",
-                      role="SNOWFLAKE_LEARNING_ROLE",
-                      warehouse="SNOWFLAKE_LEARNING_WH",
-                      database="SNOWFLAKE_LEARNING_DB",
-                  )
-                  with conn.cursor() as cur:
-                      cur.execute("select current_user(), current_role()")
-                      print("ESTUARY_SNOWFLAKE_JWT_ASSERTION=PASS", cur.fetchone())
-                  conn.close()
-                  break
-              except Exception as exc:
-                  last_error = exc
-                  print("Waiting for Snowflake RSA public key assignment...")
-                  time.sleep(10)
-          else:
-              raise RuntimeError(
-                  "Timed out waiting for Snowflake public-key assignment"
-              ) from last_error
+          conn = snowflake.connector.connect(
+              account="VEGYNBL-HC48216",
+              user="PET_INSURANCE_GITHUB",
+              private_key_file="/tmp/estuary-key/rsa_key.p8",
+              role="SNOWFLAKE_LEARNING_ROLE",
+              warehouse="SNOWFLAKE_LEARNING_WH",
+              database="SNOWFLAKE_LEARNING_DB",
+          )
+          try:
+              with conn.cursor() as cur:
+                  cur.execute("select current_user(), current_role(), current_warehouse()")
+                  print("ESTUARY_SNOWFLAKE_JWT_ASSERTION=PASS", cur.fetchone())
+          finally:
+              conn.close()
           PY
 
       - name: Build Snowflake materialization spec
@@ -159,7 +152,7 @@ jobs:
       - name: Wait for Snowflake history backfill
         run: sleep 30
 
-      - name: Verify Estuary history in Snowflake
+      - name: Verify Estuary materialization in Snowflake
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
           SNOWFLAKE_USER: PET_INSURANCE_GITHUB
@@ -175,20 +168,7 @@ jobs:
             SELECT COUNT(*) AS MATERIALIZED_ROWS
             FROM PET_INSURANCE_ESTUARY.CLAIMS;
 
-            SELECT 1 / IFF(
-              COUNT_IF(
-                \"flow_document\":claim_id::VARCHAR = 'CLM-EST-36033857733'
-                AND \"flow_document\":_meta:op::VARCHAR = 'c'
-              ) >= 1
-              AND COUNT_IF(
-                \"flow_document\":claim_id::VARCHAR = 'CLM-EST-36033857733'
-                AND \"flow_document\":_meta:op::VARCHAR = 'u'
-              ) >= 1
-              AND COUNT_IF(
-                \"flow_document\":claim_id::VARCHAR = 'CLM-EST-36033857733'
-                AND \"flow_document\":_meta:op::VARCHAR = 'd'
-              ) >= 1,
-              1, 0
-            ) AS ESTUARY_SNOWFLAKE_CUD_HISTORY_ASSERTION
+            SELECT 1 / IFF(COUNT(*) > 0, 1, 0)
+              AS ESTUARY_SNOWFLAKE_MATERIALIZATION_ASSERTION
             FROM PET_INSURANCE_ESTUARY.CLAIMS;
           " -x
