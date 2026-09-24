@@ -1,0 +1,240 @@
+name: Transaction Atomicity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-transaction-atomicity.trigger"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  atomicity:
+    runs-on: ubuntu-latest
+    env:
+      TXN_FAILURE_CLAIM_ID: CLM-TX-${{ github.run_id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Install runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+          python -m pip install "dbt-snowflake==1.12.1"
+
+      - name: Insert dedicated transaction claim
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          TXN_FAILURE_CLAIM_ID: ${{ env.TXN_FAILURE_CLAIM_ID }}
+        run: python -m insurance_platform.reliability_scenarios insert-transaction-failure-claim
+
+      - name: Inject failure after RAW merge before watermark
+        env: &runtime_env
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+          INGESTION_FAIL_AFTER_MERGE_TABLE: claims
+        run: |
+          set +e
+          python -m insurance_platform.run_ingestion > /tmp/expected-rollback.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/expected-rollback.log
+          if [ "$code" -eq 0 ]; then
+            echo "::error::Expected controlled post-merge failure, but ingestion succeeded."
+            exit 1
+          fi
+          grep -q "Injected failure after RAW merge before watermark for claims" /tmp/expected-rollback.log
+          echo "EXPECTED_POST_MERGE_FAILURE=PASS"
+
+      - name: Verify rollback audit watermark and stage cleanup
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS RAW_ROLLBACK_ASSERTION
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$TXN_FAILURE_CLAIM_ID';
+
+            WITH failed AS (
+              SELECT
+                BATCH_ID,
+                WATERMARK_BEFORE_AT,
+                WATERMARK_BEFORE_PK,
+                ERROR_CLASS,
+                ERROR_MESSAGE
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+                AND SOURCE_TABLE = 'claims'
+                AND STATUS = 'FAILED'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY STARTED_AT DESC, BATCH_ID DESC
+              ) = 1
+            ),
+            wm AS (
+              SELECT LAST_UPDATED_AT, LAST_SOURCE_PK
+              FROM PET_INSURANCE_CONTROL.INGESTION_WATERMARKS
+              WHERE SOURCE_TABLE = 'claims'
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(f.ERROR_CLASS) = 'RuntimeError'
+              AND MAX(f.ERROR_MESSAGE) ILIKE '%Injected failure after RAW merge%'
+              AND MAX(f.WATERMARK_BEFORE_AT) = MAX(wm.LAST_UPDATED_AT)
+              AND MAX(f.WATERMARK_BEFORE_PK) = MAX(wm.LAST_SOURCE_PK),
+              1, 0
+            ) AS FAILED_AUDIT_AND_WATERMARK_ASSERTION
+            FROM failed f
+            CROSS JOIN wm;
+
+            SELECT 1 / IFF(COUNT(*) = 0, 1, 0) AS FAILED_STAGE_CLEANUP_ASSERTION
+            FROM PET_INSURANCE_CONTROL.INGESTION_STAGE
+            WHERE BATCH_ID IN (
+              SELECT BATCH_ID
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+                AND SOURCE_TABLE = 'claims'
+                AND STATUS = 'FAILED'
+            );
+          " -x
+
+      - name: Restart ingestion normally
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Verify successful restart
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND COUNT_IF(PAYLOAD:claim_amount::NUMBER = 2300) = 1,
+              1, 0
+            ) AS RESTART_RAW_ASSERTION
+            FROM PET_INSURANCE_RAW.SOURCE_RECORDS
+            WHERE SOURCE_TABLE = 'claims'
+              AND SOURCE_PK = '$TXN_FAILURE_CLAIM_ID';
+
+            WITH latest_success AS (
+              SELECT ROWS_INSERTED, RECONCILIATION_STATUS
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+                AND SOURCE_TABLE = 'claims'
+                AND STATUS = 'SUCCESS'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY STARTED_AT DESC, BATCH_ID DESC
+              ) = 1
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(ROWS_INSERTED) >= 1
+              AND MAX(RECONCILIATION_STATUS) = 'CONSISTENT',
+              1, 0
+            ) AS RESTART_BATCH_ASSERTION
+            FROM latest_success;
+          " -x
+
+      - name: Rebuild trusted models
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: dbt build --project-dir dbt --profiles-dir dbt --fail-fast
+
+      - name: Verify claim reaches trusted fact
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            SELECT 1 / IFF(
+              COUNT(*) = 1
+              AND MAX(CLAIM_AMOUNT) = 2300
+              AND MAX(CLAIM_STATUS) = 'SUBMITTED',
+              1, 0
+            ) AS TRUSTED_FACT_ASSERTION
+            FROM PET_INSURANCE_MARTS.FCT_CLAIMS
+            WHERE CLAIM_ID = '$TXN_FAILURE_CLAIM_ID';
+          " -x
+
+      - name: Final unchanged ingestion replay
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.run_ingestion
+
+      - name: Verify final replay is a no-op
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+            WITH latest_five AS (
+              SELECT ROWS_EXTRACTED, ROWS_INSERTED
+              FROM PET_INSURANCE_CONTROL.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+                AND STATUS = 'SUCCESS'
+                AND NOTES = 'watermark incremental PostgreSQL to Snowflake ingestion'
+              QUALIFY ROW_NUMBER() OVER (
+                ORDER BY STARTED_AT DESC, BATCH_ID DESC
+              ) <= 5
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND SUM(ROWS_EXTRACTED) = 0
+              AND SUM(ROWS_INSERTED) = 0,
+              1, 0
+            ) AS FINAL_NO_CHANGE_REPLAY_ASSERTION
+            FROM latest_five;
+          " -x
