@@ -2,44 +2,80 @@ version: 2
 
 models:
   - name: dim_policy
-    description: Current policy dimension enriched with customer and pet attributes.
+    description: Current policy dimension enriched with non-direct-PII customer and pet attributes.
+    config:
+      contract:
+        enforced: true
     columns:
-      - name: policy_id
-        data_tests: [not_null, unique]
-      - name: customer_id
-        data_tests: [not_null]
-      - name: pet_id
-        data_tests: [not_null]
+      - {name: policy_id, data_type: varchar, data_tests: [not_null, unique]}
+      - {name: customer_id, data_type: varchar, data_tests: [not_null]}
+      - {name: pet_id, data_type: varchar, data_tests: [not_null]}
+      - {name: plan_type, data_type: varchar}
+      - {name: policy_status, data_type: varchar}
+      - {name: start_date, data_type: date}
+      - {name: end_date, data_type: date}
+      - {name: monthly_premium, data_type: "number(18,2)"}
+      - {name: province, data_type: varchar}
+      - {name: pet_name, data_type: varchar}
+      - {name: species, data_type: varchar}
+      - {name: breed, data_type: varchar}
 
   - name: dim_customer_scd2
-    description: Type-2 customer history derived from every customer version in append-only RAW.
+    description: Type-2 customer geography history with direct PII excluded from the analytics mart.
+    config:
+      contract:
+        enforced: true
     columns:
-      - name: customer_id
-        data_tests: [not_null]
-      - name: effective_from
-        data_tests: [not_null]
-      - name: is_current
-        data_tests: [not_null]
+      - {name: customer_id, data_type: varchar, data_tests: [not_null]}
+      - {name: province, data_type: varchar}
+      - {name: is_deleted, data_type: boolean}
+      - {name: effective_from, data_type: timestamp_tz, data_tests: [not_null]}
+      - {name: effective_to, data_type: timestamp_tz}
+      - {name: is_current, data_type: boolean, data_tests: [not_null]}
 
   - name: fct_claims
-    description: Current claim fact enriched with policy, customer, pet, and payment context.
+    description: One row per current non-deleted claim enriched with policy, customer, pet, and payment context.
+    config:
+      contract:
+        enforced: true
     columns:
-      - name: claim_id
-        data_tests: [not_null, unique]
-      - name: policy_id
-        data_tests: [not_null]
-      - name: claim_amount
-        data_tests: [not_null]
+      - {name: claim_id, data_type: varchar, data_tests: [not_null, unique]}
+      - {name: policy_id, data_type: varchar, data_tests: [not_null]}
+      - {name: pet_id, data_type: varchar}
+      - {name: customer_id, data_type: varchar}
+      - {name: province, data_type: varchar}
+      - {name: plan_type, data_type: varchar}
+      - {name: species, data_type: varchar}
+      - {name: breed, data_type: varchar}
+      - {name: claim_type, data_type: varchar}
+      - {name: claim_status, data_type: varchar}
+      - {name: claim_date, data_type: date}
+      - {name: claim_amount, data_type: "number(18,2)", data_tests: [not_null]}
+      - {name: approved_amount, data_type: "number(18,2)"}
+      - {name: paid_amount, data_type: "number(18,2)"}
+      - {name: latest_payment_date, data_type: date}
+      - {name: source_updated_at, data_type: timestamp_tz}
 
   - name: mart_portfolio_performance
     description: >
       Portfolio performance by province, species, and plan. paid_loss_ratio_proxy uses
       current monthly premium multiplied by 12 as an annualized premium proxy; it is a
       portfolio demonstration metric, not actuarial earned premium.
+    config:
+      contract:
+        enforced: true
     columns:
-      - name: province
-        data_tests: [not_null]
-      - name: species
-        data_tests: [not_null]
-      - name: plan_type
-        data_tests: [not_null]
+      - {name: province, data_type: varchar, data_tests: [not_null]}
+      - {name: species, data_type: varchar, data_tests: [not_null]}
+      - {name: plan_type, data_type: varchar, data_tests: [not_null]}
+      - {name: policy_count, data_type: "number(38,0)"}
+      - {name: active_policy_count, data_type: "number(38,0)"}
+      - {name: monthly_premium_book, data_type: "number(18,2)"}
+      - {name: annualized_premium_proxy, data_type: "number(18,2)"}
+      - {name: claim_count, data_type: "number(38,0)"}
+      - {name: incurred_claim_amount, data_type: "number(18,2)"}
+      - {name: approved_claim_amount, data_type: "number(18,2)"}
+      - {name: paid_claim_amount, data_type: "number(18,2)"}
+      - {name: claims_per_policy, data_type: "number(18,6)"}
+      - {name: average_claim_severity, data_type: "number(18,2)"}
+      - {name: paid_loss_ratio_proxy, data_type: "number(18,6)"}
