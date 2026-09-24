@@ -36,19 +36,19 @@ jobs:
       - name: Validate provider configuration
         env:
           FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
-          ESTUARY_POSTGRES_DSN: ${{ secrets.ESTUARY_POSTGRES_DSN }}
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
           ESTUARY_SNOWFLAKE_PRIVATE_KEY: ${{ secrets.ESTUARY_SNOWFLAKE_PRIVATE_KEY }}
           ESTUARY_PREFIX: ${{ vars.ESTUARY_PREFIX }}
         run: |
           test -n "$FLOW_AUTH_TOKEN"
-          test -n "$ESTUARY_POSTGRES_DSN"
+          test -n "$POSTGRES_DSN"
           test -n "$ESTUARY_SNOWFLAKE_PRIVATE_KEY"
           test -n "$ESTUARY_PREFIX"
 
       - name: Build isolated Neon capture specification
         env: &estuary_env
           FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
-          ESTUARY_POSTGRES_DSN: ${{ secrets.ESTUARY_POSTGRES_DSN }}
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
           ESTUARY_PREFIX: ${{ vars.ESTUARY_PREFIX }}
           ESTUARY_SNOWFLAKE_PRIVATE_KEY: ${{ secrets.ESTUARY_SNOWFLAKE_PRIVATE_KEY }}
           ESTUARY_SNOWFLAKE_HOST: VEGYNBL-HC48216.snowflakecomputing.com
