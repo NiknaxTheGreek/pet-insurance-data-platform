@@ -4,49 +4,22 @@ source_table: policies
 primary_key: policy_id
 allow_additive_columns: true
 columns:
-  policy_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
-  customer_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
-  pet_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
+  policy_id: {data_type: character varying, nullable: false, classification: internal_identifier}
+  customer_id: {data_type: character varying, nullable: false, classification: internal_identifier}
+  pet_id: {data_type: character varying, nullable: false, classification: internal_identifier}
   plan_type:
-    data_type: text
+    data_type: character varying
     nullable: false
     classification: business
     allowed_values: [ACCIDENT, CORE, COMPREHENSIVE]
   policy_status:
-    data_type: text
+    data_type: character varying
     nullable: false
     classification: business
     allowed_values: [ACTIVE, CANCELLED, LAPSED]
-  start_date:
-    data_type: date
-    nullable: false
-    classification: business
-  end_date:
-    data_type: date
-    nullable: true
-    classification: business
-  monthly_premium:
-    data_type: numeric
-    nullable: false
-    classification: financial
-  created_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  updated_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  is_deleted:
-    data_type: boolean
-    nullable: false
-    classification: operational
+  start_date: {data_type: date, nullable: false, classification: business}
+  end_date: {data_type: date, nullable: true, classification: business}
+  monthly_premium: {data_type: numeric, nullable: false, classification: financial}
+  created_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  updated_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  is_deleted: {data_type: boolean, nullable: false, classification: operational}
