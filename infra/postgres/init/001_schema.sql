@@ -1,8 +1,11 @@
 CREATE TABLE IF NOT EXISTS customers (
-    customer_id TEXT PRIMARY KEY,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    province TEXT NOT NULL,
+    customer_id VARCHAR(20) PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    province VARCHAR(100) NOT NULL,
+    postal_code VARCHAR(20),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -10,11 +13,11 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 CREATE TABLE IF NOT EXISTS pets (
-    pet_id TEXT PRIMARY KEY,
-    customer_id TEXT NOT NULL REFERENCES customers(customer_id),
-    pet_name TEXT NOT NULL,
-    species TEXT NOT NULL CHECK (species IN ('DOG','CAT')),
-    breed TEXT NOT NULL,
+    pet_id VARCHAR(20) PRIMARY KEY,
+    customer_id VARCHAR(20) NOT NULL REFERENCES customers(customer_id),
+    pet_name VARCHAR(100) NOT NULL,
+    species VARCHAR(20) NOT NULL CHECK (species IN ('DOG','CAT')),
+    breed VARCHAR(100),
     date_of_birth DATE NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
@@ -23,11 +26,11 @@ CREATE TABLE IF NOT EXISTS pets (
 );
 
 CREATE TABLE IF NOT EXISTS policies (
-    policy_id TEXT PRIMARY KEY,
-    customer_id TEXT NOT NULL REFERENCES customers(customer_id),
-    pet_id TEXT NOT NULL REFERENCES pets(pet_id),
-    plan_type TEXT NOT NULL CHECK (plan_type IN ('ACCIDENT','CORE','COMPREHENSIVE')),
-    policy_status TEXT NOT NULL CHECK (policy_status IN ('ACTIVE','CANCELLED','LAPSED')),
+    policy_id VARCHAR(20) PRIMARY KEY,
+    customer_id VARCHAR(20) NOT NULL REFERENCES customers(customer_id),
+    pet_id VARCHAR(20) NOT NULL REFERENCES pets(pet_id),
+    plan_type VARCHAR(30) NOT NULL CHECK (plan_type IN ('ACCIDENT','CORE','COMPREHENSIVE')),
+    policy_status VARCHAR(20) NOT NULL CHECK (policy_status IN ('ACTIVE','CANCELLED','LAPSED')),
     start_date DATE NOT NULL,
     end_date DATE,
     monthly_premium NUMERIC(12,2) NOT NULL CHECK (monthly_premium >= 0),
@@ -39,14 +42,14 @@ CREATE TABLE IF NOT EXISTS policies (
 );
 
 CREATE TABLE IF NOT EXISTS claims (
-    claim_id TEXT PRIMARY KEY,
-    policy_id TEXT NOT NULL REFERENCES policies(policy_id),
-    pet_id TEXT NOT NULL REFERENCES pets(pet_id),
-    claim_type TEXT NOT NULL CHECK (claim_type IN ('ACCIDENT','ILLNESS','ROUTINE_CARE')),
-    claim_status TEXT NOT NULL CHECK (claim_status IN ('SUBMITTED','ASSESSED','APPROVED','REJECTED','PAID')),
+    claim_id VARCHAR(20) PRIMARY KEY,
+    policy_id VARCHAR(20) NOT NULL REFERENCES policies(policy_id),
+    pet_id VARCHAR(20) NOT NULL REFERENCES pets(pet_id),
+    claim_type VARCHAR(30) NOT NULL CHECK (claim_type IN ('ACCIDENT','ILLNESS','ROUTINE_CARE')),
     claim_date DATE NOT NULL,
     claim_amount NUMERIC(12,2) NOT NULL CHECK (claim_amount >= 0),
     approved_amount NUMERIC(12,2),
+    claim_status VARCHAR(20) NOT NULL CHECK (claim_status IN ('SUBMITTED','ASSESSED','APPROVED','REJECTED','PAID')),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -55,11 +58,11 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 
 CREATE TABLE IF NOT EXISTS claim_payments (
-    payment_id TEXT PRIMARY KEY,
-    claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+    payment_id VARCHAR(20) PRIMARY KEY,
+    claim_id VARCHAR(20) NOT NULL REFERENCES claims(claim_id),
     payment_date DATE NOT NULL,
     payment_amount NUMERIC(12,2) NOT NULL CHECK (payment_amount > 0),
-    payment_status TEXT NOT NULL CHECK (payment_status IN ('PENDING','PAID','SETTLED','REVERSED')),
+    payment_status VARCHAR(20) NOT NULL CHECK (payment_status IN ('PENDING','PAID','SETTLED','REVERSED')),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
