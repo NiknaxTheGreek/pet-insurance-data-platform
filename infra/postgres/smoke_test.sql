@@ -17,9 +17,11 @@ END
 $$;
 
 INSERT INTO customers (
-    customer_id, first_name, last_name, province, created_at, updated_at, is_deleted
+    customer_id, first_name, last_name, email, phone, province, postal_code,
+    created_at, updated_at, is_deleted
 ) VALUES (
-    'CUS-00001', 'Docker', 'Customer', 'Gauteng',
+    'CUS-00001', 'Docker', 'Customer', 'docker.customer@example.invalid',
+    '+27-10-0000001', 'Gauteng', '1559',
     TIMESTAMPTZ '2026-01-01 08:00:00+00',
     TIMESTAMPTZ '2026-01-01 08:00:00+00',
     FALSE
