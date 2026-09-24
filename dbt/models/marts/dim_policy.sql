@@ -7,8 +7,6 @@ select
     p.start_date,
     p.end_date,
     p.monthly_premium,
-    c.first_name,
-    c.last_name,
     c.province,
     pet.pet_name,
     pet.species,

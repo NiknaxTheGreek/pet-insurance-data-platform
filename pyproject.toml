@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,11 +9,13 @@ requires-python = ">=3.11"
 
 [project.optional-dependencies]
 ingestion = [
-  "psycopg[binary]>=3.2,<4",
-  "snowflake-connector-python>=4.0,<5",
+  "psycopg[binary]==3.3.6",
+  "PyYAML==6.0.2",
+  "snowflake-connector-python==4.7.5",
 ]
 dev = [
-  "pytest>=8,<9",
+  "pytest==9.1.1",
+  "PyYAML==6.0.2",
 ]
 
 [tool.pytest.ini_options]

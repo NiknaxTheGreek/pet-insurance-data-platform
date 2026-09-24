@@ -1,0 +1,52 @@
+version: 1
+schema: public
+source_table: claims
+primary_key: claim_id
+allow_additive_columns: true
+columns:
+  claim_id:
+    data_type: text
+    nullable: false
+    classification: internal_identifier
+  policy_id:
+    data_type: text
+    nullable: false
+    classification: internal_identifier
+  pet_id:
+    data_type: text
+    nullable: false
+    classification: internal_identifier
+  claim_type:
+    data_type: text
+    nullable: false
+    classification: business
+    allowed_values: [ACCIDENT, ILLNESS, ROUTINE_CARE]
+  claim_status:
+    data_type: text
+    nullable: false
+    classification: business
+    allowed_values: [SUBMITTED, ASSESSED, APPROVED, REJECTED, PAID]
+  claim_date:
+    data_type: date
+    nullable: false
+    classification: business
+  claim_amount:
+    data_type: numeric
+    nullable: false
+    classification: financial
+  approved_amount:
+    data_type: numeric
+    nullable: true
+    classification: financial
+  created_at:
+    data_type: timestamp with time zone
+    nullable: false
+    classification: operational
+  updated_at:
+    data_type: timestamp with time zone
+    nullable: false
+    classification: operational
+  is_deleted:
+    data_type: boolean
+    nullable: false
+    classification: operational

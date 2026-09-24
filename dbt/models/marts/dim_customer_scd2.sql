@@ -1,8 +1,6 @@
 with customer_versions as (
     select
         source_pk::varchar as customer_id,
-        payload:first_name::varchar as first_name,
-        payload:last_name::varchar as last_name,
         payload:province::varchar as province,
         coalesce(payload:is_deleted::boolean, false) as is_deleted,
         source_updated_at as effective_from,
@@ -16,8 +14,6 @@ with customer_versions as (
 
 select
     customer_id,
-    first_name,
-    last_name,
     province,
     is_deleted,
     effective_from,

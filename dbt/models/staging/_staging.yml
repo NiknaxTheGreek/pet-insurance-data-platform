@@ -2,13 +2,18 @@ version: 2
 
 models:
   - name: stg_customers
-    description: Current customer state reconstructed from append-only RAW history.
+    description: Restricted operational customer state reconstructed from append-only RAW.
+    meta:
+      data_classification: restricted_operational
+      contains_direct_pii: true
     columns:
       - name: customer_id
         data_tests: [not_null, unique]
 
   - name: stg_pets
     description: Current pet state reconstructed from append-only RAW history.
+    meta:
+      data_classification: restricted_operational
     columns:
       - name: pet_id
         data_tests: [not_null, unique]
@@ -19,6 +24,11 @@ models:
               arguments:
                 to: ref('stg_customers')
                 field: customer_id
+      - name: species
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['DOG', 'CAT']
 
   - name: stg_policies
     description: Current policy state reconstructed from append-only RAW history.
@@ -39,6 +49,16 @@ models:
               arguments:
                 to: ref('stg_pets')
                 field: pet_id
+      - name: plan_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ACCIDENT', 'CORE', 'COMPREHENSIVE']
+      - name: policy_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ACTIVE', 'CANCELLED', 'LAPSED']
 
   - name: stg_claims
     description: Current claim state; historical claim events are retained separately in int_claim_events.
@@ -60,7 +80,16 @@ models:
                 to: ref('stg_pets')
                 field: pet_id
       - name: claim_status
-        data_tests: [not_null]
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['SUBMITTED', 'ASSESSED', 'APPROVED', 'REJECTED', 'PAID']
+      - name: claim_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ACCIDENT', 'ILLNESS', 'ROUTINE_CARE']
       - name: claim_amount
         data_tests: [not_null]
 
@@ -78,3 +107,8 @@ models:
                 field: claim_id
       - name: payment_amount
         data_tests: [not_null]
+      - name: payment_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['PENDING', 'PAID', 'SETTLED', 'REVERSED']

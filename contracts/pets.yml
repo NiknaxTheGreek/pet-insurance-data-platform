@@ -1,0 +1,43 @@
+version: 1
+schema: public
+source_table: pets
+primary_key: pet_id
+allow_additive_columns: true
+columns:
+  pet_id:
+    data_type: text
+    nullable: false
+    classification: internal_identifier
+  customer_id:
+    data_type: text
+    nullable: false
+    classification: internal_identifier
+  pet_name:
+    data_type: text
+    nullable: false
+    classification: quasi_identifier
+  species:
+    data_type: text
+    nullable: false
+    classification: business
+    allowed_values: [DOG, CAT]
+  breed:
+    data_type: text
+    nullable: false
+    classification: business
+  date_of_birth:
+    data_type: date
+    nullable: false
+    classification: business
+  created_at:
+    data_type: timestamp with time zone
+    nullable: false
+    classification: operational
+  updated_at:
+    data_type: timestamp with time zone
+    nullable: false
+    classification: operational
+  is_deleted:
+    data_type: boolean
+    nullable: false
+    classification: operational
