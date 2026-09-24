@@ -1,0 +1,107 @@
+name: Schema Evolution
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-schema-evolution.trigger"
+
+jobs:
+  schema-evolution:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_DSN: postgresql://insurance_app:insurance_dev@localhost:5432/insurance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install contract runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+
+      - name: Start clean PostgreSQL
+        run: docker compose up -d postgres
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U insurance_app -d insurance; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+
+      - name: Baseline contract must pass
+        run: python -m insurance_platform.validate_contracts
+
+      - name: Add non-breaking source column
+        run: |
+          docker compose exec -T postgres psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER TABLE claims ADD COLUMN submission_channel VARCHAR(30);
+          UPDATE claims
+          SET submission_channel = 'WEB'
+          WHERE claim_id = 'CLM-10042';
+          SQL
+
+      - name: Additive column must be accepted
+        run: python -m insurance_platform.validate_contracts
+
+      - name: Prove additive field is preserved by source serialization
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg.rows import dict_row
+          from insurance_platform.ingestion import TableSpec, row_to_change
+
+          with psycopg.connect(os.environ["POSTGRES_DSN"], row_factory=dict_row) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("SELECT * FROM claims WHERE claim_id = 'CLM-10042'")
+                  change = row_to_change(TableSpec("claims", "claim_id"), cur.fetchone())
+
+          assert change.payload["submission_channel"] == "WEB"
+          assert "submission_channel" in change.payload
+          print("ADDITIVE_PAYLOAD_PRESERVATION=PASS")
+          PY
+
+      - name: Introduce breaking nullability change
+        run: |
+          docker compose exec -T postgres psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER TABLE claims ALTER COLUMN claim_status DROP NOT NULL;
+          SQL
+
+      - name: Breaking change must be rejected
+        run: |
+          set +e
+          python -m insurance_platform.validate_contracts > /tmp/breaking-contract.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/breaking-contract.log
+          if [ "$code" -eq 0 ]; then
+            echo "::error::Expected breaking nullability change to fail contract validation."
+            exit 1
+          fi
+          grep -q "nullability mismatch for claim_status" /tmp/breaking-contract.log
+          echo "BREAKING_CHANGE_REJECTION=PASS"
+
+      - name: Restore source contract and revalidate
+        run: |
+          docker compose exec -T postgres psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER TABLE claims ALTER COLUMN claim_status SET NOT NULL;
+          SQL
+          python -m insurance_platform.validate_contracts
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
