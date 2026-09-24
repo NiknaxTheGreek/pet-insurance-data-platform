@@ -11,6 +11,7 @@ LOGGER = logging.getLogger(__name__)
 BAD_PAYMENT_ID = "PAY-DQ-10043"
 BAD_PAYMENT_CLAIM_ID = "CLM-10043"
 LATE_CLAIM_ID = os.getenv("LATE_CLAIM_ID", "CLM-LATE-10045")
+LATE_EXISTING_CLAIM_ID = os.getenv("LATE_EXISTING_CLAIM_ID", "CLM-E-10045")
 SOFT_DELETE_CLAIM_ID = "CLM-10043"
 
 
@@ -115,6 +116,55 @@ def insert_late_claim(cur) -> None:
     )
 
 
+def insert_late_existing_claim(cur) -> None:
+    cur.execute(
+        """
+        INSERT INTO claims (
+            claim_id, policy_id, pet_id, claim_type, claim_status, claim_date,
+            claim_amount, approved_amount, created_at, updated_at, is_deleted
+        )
+        SELECT
+            %s,
+            p.policy_id,
+            p.pet_id,
+            'ILLNESS',
+            'SUBMITTED',
+            DATE '2026-09-21',
+            2100.00,
+            NULL,
+            TIMESTAMPTZ '2026-09-21 13:00:00+00',
+            TIMESTAMPTZ '2026-09-21 13:00:00+00',
+            FALSE
+        FROM policies p
+        WHERE p.policy_id = 'POL-00002'
+        ON CONFLICT (claim_id) DO NOTHING
+        """,
+        (LATE_EXISTING_CLAIM_ID,),
+    )
+    LOGGER.info(
+        "late_existing_claim_present claim_id=%s amount=2100 updated_at=2026-09-21T13:00:00Z",
+        LATE_EXISTING_CLAIM_ID,
+    )
+
+
+def mutate_late_existing_claim(cur) -> None:
+    cur.execute(
+        """
+        UPDATE claims
+        SET claim_amount = 2600.00,
+            updated_at = TIMESTAMPTZ '2026-09-21 14:00:00+00'
+        WHERE claim_id = %s
+          AND claim_amount = 2100.00
+        """,
+        (LATE_EXISTING_CLAIM_ID,),
+    )
+    LOGGER.info(
+        "late_existing_claim_mutated claim_id=%s changed_rows=%d amount=2600 updated_at=2026-09-21T14:00:00Z",
+        LATE_EXISTING_CLAIM_ID,
+        cur.rowcount,
+    )
+
+
 def soft_delete_claim(cur) -> None:
     cur.execute(
         f"""
@@ -146,6 +196,8 @@ def run(mode: str) -> None:
         "inject-invalid-payment": inject_invalid_payment,
         "repair-invalid-payment": repair_invalid_payment,
         "insert-late-claim": insert_late_claim,
+        "insert-late-existing-claim": insert_late_existing_claim,
+        "mutate-late-existing-claim": mutate_late_existing_claim,
         "soft-delete-claim": soft_delete_claim,
     }
 
@@ -162,6 +214,8 @@ if __name__ == "__main__":
             "inject-invalid-payment",
             "repair-invalid-payment",
             "insert-late-claim",
+            "insert-late-existing-claim",
+            "mutate-late-existing-claim",
             "soft-delete-claim",
         ],
     )
