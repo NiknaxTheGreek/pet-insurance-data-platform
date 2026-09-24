@@ -132,3 +132,35 @@ def test_retry_call_does_not_retry_non_transient_failure():
         retry_call(operation, sleep=lambda _: None)
 
     assert attempts == [1]
+
+
+def test_stage_records_uses_connector_safe_values_binding(monkeypatch):
+    from insurance_platform.run_ingestion import _stage_records
+
+    class Cursor:
+        def __init__(self):
+            self.sql = None
+            self.rows = None
+
+        def executemany(self, sql, rows):
+            self.sql = sql
+            self.rows = list(rows)
+
+    ts = datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc)
+    record = ChangeRecord(
+        "claims",
+        "CLM-TEST",
+        ts,
+        "UPSERT",
+        {"claim_id": "CLM-TEST", "updated_at": ts},
+        "abc123",
+    )
+    cursor = Cursor()
+
+    _stage_records(cursor, [record], "batch-test", batch_size=100)
+
+    assert "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)" in cursor.sql
+    assert "PARSE_JSON" not in cursor.sql
+    assert len(cursor.rows) == 1
+    assert len(cursor.rows[0]) == 8
+    assert cursor.rows[0][5] == cursor.rows[0][6]
