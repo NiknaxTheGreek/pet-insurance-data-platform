@@ -8,3 +8,6 @@ data/generated/*.csv
 
 # Google GitHub Actions temporary WIF credentials
 gha-creds-*.json
+
+# Local Estuary JWT key material
+.estuary-keys/
