@@ -3,17 +3,19 @@ version: 2
 models:
   - name: stg_customers
     description: Restricted operational customer state reconstructed from append-only RAW.
-    meta:
-      data_classification: restricted_operational
-      contains_direct_pii: true
+    config:
+      meta:
+        data_classification: restricted_operational
+        contains_direct_pii: true
     columns:
       - name: customer_id
         data_tests: [not_null, unique]
 
   - name: stg_pets
     description: Current pet state reconstructed from append-only RAW history.
-    meta:
-      data_classification: restricted_operational
+    config:
+      meta:
+        data_classification: restricted_operational
     columns:
       - name: pet_id
         data_tests: [not_null, unique]
