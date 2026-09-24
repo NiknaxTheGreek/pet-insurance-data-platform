@@ -4,36 +4,15 @@ source_table: claim_payments
 primary_key: payment_id
 allow_additive_columns: true
 columns:
-  payment_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
-  claim_id:
-    data_type: text
-    nullable: false
-    classification: internal_identifier
-  payment_date:
-    data_type: date
-    nullable: false
-    classification: financial
-  payment_amount:
-    data_type: numeric
-    nullable: false
-    classification: financial
+  payment_id: {data_type: character varying, nullable: false, classification: internal_identifier}
+  claim_id: {data_type: character varying, nullable: false, classification: internal_identifier}
+  payment_date: {data_type: date, nullable: false, classification: financial}
+  payment_amount: {data_type: numeric, nullable: false, classification: financial}
   payment_status:
-    data_type: text
+    data_type: character varying
     nullable: false
     classification: business
     allowed_values: [PENDING, PAID, SETTLED, REVERSED]
-  created_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  updated_at:
-    data_type: timestamp with time zone
-    nullable: false
-    classification: operational
-  is_deleted:
-    data_type: boolean
-    nullable: false
-    classification: operational
+  created_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  updated_at: {data_type: timestamp with time zone, nullable: false, classification: operational}
+  is_deleted: {data_type: boolean, nullable: false, classification: operational}
