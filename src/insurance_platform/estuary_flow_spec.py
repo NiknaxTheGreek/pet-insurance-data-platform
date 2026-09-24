@@ -62,7 +62,10 @@ def parse_postgres_dsn(dsn: str) -> dict[str, str]:
 
 def write_capture_spec(path: Path) -> None:
     prefix = required("ESTUARY_PREFIX").rstrip("/")
-    pg = parse_postgres_dsn(required("ESTUARY_POSTGRES_DSN"))
+    source_dsn = os.getenv("ESTUARY_POSTGRES_DSN")
+    if not source_dsn:
+        source_dsn = direct_neon_dsn(required("POSTGRES_DSN"))
+    pg = parse_postgres_dsn(source_dsn)
 
     capture_name = f"{prefix}/pet-insurance/source-neon"
     payload = {
