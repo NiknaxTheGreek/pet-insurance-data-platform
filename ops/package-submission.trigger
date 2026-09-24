@@ -1,2 +1,2 @@
-trigger: 2026-09-23T21:15:00Z
-reason: build-submission-candidate-checkpoint
+trigger: 2026-09-24T07:36:30Z
+reason: rebuild-submission-candidate-with-badger-guide
