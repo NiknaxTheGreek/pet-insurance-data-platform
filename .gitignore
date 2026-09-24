@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 data/generated/*.csv
 !data/generated/.gitkeep
+
+# Google GitHub Actions temporary WIF credentials
+gha-creds-*.json
