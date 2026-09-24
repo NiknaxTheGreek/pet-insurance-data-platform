@@ -40,7 +40,7 @@ if ! gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
     --workload-identity-pool="$POOL_ID" \
     --location=global \
     --project="$PROJECT_ID" \
-    --display-name="GitHub pet-insurance-data-platform" \
+    --display-name="GitHub pet-insurance" \
     --issuer-uri="https://token.actions.githubusercontent.com" \
     --attribute-mapping="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.ref=assertion.ref" \
     --attribute-condition="assertion.repository_id=='$REPOSITORY_ID' && assertion.repository_owner_id=='$REPOSITORY_OWNER_ID' && assertion.ref=='refs/heads/main'"
