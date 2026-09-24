@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 import yaml
 
@@ -13,6 +13,33 @@ def required(name: str) -> str:
     if not value:
         raise RuntimeError(f"Required environment variable {name} is not set")
     return value
+
+
+def direct_neon_dsn(dsn: str) -> str:
+    parsed = urlparse(dsn)
+    if not parsed.hostname:
+        raise ValueError("Neon DSN must include a hostname")
+
+    host = parsed.hostname.replace("-pooler", "")
+    userinfo = ""
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo += f":{parsed.password}"
+        userinfo += "@"
+
+    port = f":{parsed.port}" if parsed.port else ""
+    netloc = f"{userinfo}{host}{port}"
+    return urlunparse(
+        (
+            parsed.scheme,
+            netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 def parse_postgres_dsn(dsn: str) -> dict[str, str]:
