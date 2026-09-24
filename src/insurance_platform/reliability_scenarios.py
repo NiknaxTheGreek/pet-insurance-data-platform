@@ -12,6 +12,7 @@ BAD_PAYMENT_ID = "PAY-DQ-10043"
 BAD_PAYMENT_CLAIM_ID = "CLM-10043"
 LATE_CLAIM_ID = os.getenv("LATE_CLAIM_ID", "CLM-LATE-10045")
 LATE_EXISTING_CLAIM_ID = os.getenv("LATE_EXISTING_CLAIM_ID", "CLM-E-10045")
+TXN_FAILURE_CLAIM_ID = os.getenv("TXN_FAILURE_CLAIM_ID", "CLM-TX-10045")
 SOFT_DELETE_CLAIM_ID = "CLM-10043"
 
 
@@ -165,6 +166,38 @@ def mutate_late_existing_claim(cur) -> None:
     )
 
 
+def insert_transaction_failure_claim(cur) -> None:
+    cur.execute(
+        """
+        INSERT INTO claims (
+            claim_id, policy_id, pet_id, claim_type, claim_status, claim_date,
+            claim_amount, approved_amount, created_at, updated_at, is_deleted
+        )
+        SELECT
+            %s,
+            p.policy_id,
+            p.pet_id,
+            'ACCIDENT',
+            'SUBMITTED',
+            CURRENT_DATE,
+            2300.00,
+            NULL,
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
+            FALSE
+        FROM policies p
+        WHERE p.policy_id = 'POL-00002'
+        ON CONFLICT (claim_id) DO NOTHING
+        """,
+        (TXN_FAILURE_CLAIM_ID,),
+    )
+    LOGGER.info(
+        "transaction_failure_claim_present claim_id=%s inserted_or_existing_rows=%d",
+        TXN_FAILURE_CLAIM_ID,
+        cur.rowcount,
+    )
+
+
 def soft_delete_claim(cur) -> None:
     cur.execute(
         f"""
@@ -198,6 +231,7 @@ def run(mode: str) -> None:
         "insert-late-claim": insert_late_claim,
         "insert-late-existing-claim": insert_late_existing_claim,
         "mutate-late-existing-claim": mutate_late_existing_claim,
+        "insert-transaction-failure-claim": insert_transaction_failure_claim,
         "soft-delete-claim": soft_delete_claim,
     }
 
@@ -216,6 +250,7 @@ if __name__ == "__main__":
             "insert-late-claim",
             "insert-late-existing-claim",
             "mutate-late-existing-claim",
+            "insert-transaction-failure-claim",
             "soft-delete-claim",
         ],
     )
