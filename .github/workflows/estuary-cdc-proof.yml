@@ -1,0 +1,122 @@
+name: Estuary CDC Mutation Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-cdc-proof.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  cdc-proof:
+    runs-on: ubuntu-latest
+    env:
+      ESTUARY_DEMO_CLAIM_ID: CLM-EST-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locked runtime
+        run: |
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install -e . --no-deps
+
+      - name: Install flowctl
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/flowctl \
+            https://github.com/estuary/flow/releases/latest/download/flowctl-x86_64-linux
+          sudo chmod +x /usr/local/bin/flowctl
+
+      - name: Insert isolated source claim
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.estuary_cdc_demo insert
+
+      - name: Wait for insert capture
+        run: sleep 12
+
+      - name: Assert Estuary create event
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          flowctl collections read \
+            --collection Private77/pet-insurance/public/claims \
+            --since 5m > /tmp/estuary-events.jsonl
+          python - <<'PY'
+          import json, os
+          claim_id = os.environ["ESTUARY_DEMO_CLAIM_ID"]
+          docs = [json.loads(line) for line in open("/tmp/estuary-events.jsonl") if line.strip()]
+          matches = [d for d in docs if d.get("claim_id") == claim_id and d.get("_meta", {}).get("op") == "c"]
+          if not matches:
+              raise SystemExit(f"Missing Estuary create event for {claim_id}")
+          print("ESTUARY_CREATE_ASSERTION=PASS")
+          PY
+
+      - name: Update isolated source claim
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.estuary_cdc_demo update
+
+      - name: Wait for update capture
+        run: sleep 12
+
+      - name: Assert Estuary update event
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          flowctl collections read \
+            --collection Private77/pet-insurance/public/claims \
+            --since 5m > /tmp/estuary-events.jsonl
+          python - <<'PY'
+          import json, os
+          claim_id = os.environ["ESTUARY_DEMO_CLAIM_ID"]
+          docs = [json.loads(line) for line in open("/tmp/estuary-events.jsonl") if line.strip()]
+          matches = [
+              d for d in docs
+              if d.get("claim_id") == claim_id
+              and d.get("_meta", {}).get("op") == "u"
+              and d.get("claim_status") == "APPROVED"
+              and str(d.get("approved_amount")) == "1900.00"
+          ]
+          if not matches:
+              raise SystemExit(f"Missing Estuary update event for {claim_id}")
+          print("ESTUARY_UPDATE_ASSERTION=PASS")
+          PY
+
+      - name: Physically delete isolated source claim
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: python -m insurance_platform.estuary_cdc_demo delete
+
+      - name: Wait for delete capture
+        run: sleep 12
+
+      - name: Assert Estuary delete event
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          flowctl collections read \
+            --collection Private77/pet-insurance/public/claims \
+            --since 5m > /tmp/estuary-events.jsonl
+          python - <<'PY'
+          import json, os
+          claim_id = os.environ["ESTUARY_DEMO_CLAIM_ID"]
+          docs = [json.loads(line) for line in open("/tmp/estuary-events.jsonl") if line.strip()]
+          matches = [
+              d for d in docs
+              if d.get("claim_id") == claim_id
+              and d.get("_meta", {}).get("op") == "d"
+          ]
+          if not matches:
+              raise SystemExit(f"Missing Estuary delete event for {claim_id}")
+          print("ESTUARY_DELETE_ASSERTION=PASS")
+          print("ESTUARY_CDC_INSERT_UPDATE_DELETE_ASSERTION=PASS")
+          PY
