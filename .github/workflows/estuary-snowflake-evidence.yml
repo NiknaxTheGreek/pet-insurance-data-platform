@@ -1,0 +1,55 @@
+name: Estuary Snowflake CDC Evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-snowflake-evidence.trigger"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Verify Estuary c/u/d history in Snowflake
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE ROLE SNOWFLAKE_LEARNING_ROLE;
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT CLAIM_ID, \"_meta/op\"
+            FROM PET_INSURANCE_ESTUARY.CLAIMS
+            WHERE CLAIM_ID = 'CLM-EST-36033857733'
+            ORDER BY \"_meta/op\";
+
+            SELECT
+              COUNT_IF(\"_meta/op\" = 'c') AS CREATE_EVENTS,
+              COUNT_IF(\"_meta/op\" = 'u') AS UPDATE_EVENTS,
+              COUNT_IF(\"_meta/op\" = 'd') AS DELETE_EVENTS,
+              1 / IFF(
+                COUNT_IF(\"_meta/op\" = 'c') >= 1
+                AND COUNT_IF(\"_meta/op\" = 'u') >= 1
+                AND COUNT_IF(\"_meta/op\" = 'd') >= 1,
+                1, 0
+              ) AS ESTUARY_SNOWFLAKE_CUD_ASSERTION
+            FROM PET_INSURANCE_ESTUARY.CLAIMS
+            WHERE CLAIM_ID = 'CLM-EST-36033857733';
+          " -x
