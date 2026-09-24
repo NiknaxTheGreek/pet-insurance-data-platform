@@ -10,6 +10,7 @@ on:
       - "tests/**"
       - "infra/postgres/**"
       - "dbt/**"
+      - "contracts/**"
       - "docker-compose.yml"
       - "pyproject.toml"
       - ".github/workflows/platform-ci.yml"
@@ -19,6 +20,7 @@ on:
       - "tests/**"
       - "infra/postgres/**"
       - "dbt/**"
+      - "contracts/**"
       - "docker-compose.yml"
       - "pyproject.toml"
       - ".github/workflows/platform-ci.yml"
@@ -59,6 +61,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install contract validation runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+
       - name: Start PostgreSQL
         run: docker compose up -d postgres
 
@@ -73,9 +85,16 @@ jobs:
           docker compose logs postgres
           exit 1
 
+      - name: Validate source contracts against clean Docker PostgreSQL
+        env:
+          POSTGRES_DSN: postgresql://insurance_app:insurance_dev@localhost:5432/insurance
+        run: python -m insurance_platform.validate_contracts
+
       - name: Validate schema constraints and relationships
         run: |
-          docker compose exec -T postgres             psql -U insurance_app -d insurance -v ON_ERROR_STOP=1             < infra/postgres/smoke_test.sql
+          docker compose exec -T postgres \
+            psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 \
+            < infra/postgres/smoke_test.sql
 
       - name: Show container status
         if: always()
