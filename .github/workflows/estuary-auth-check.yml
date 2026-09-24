@@ -1,0 +1,35 @@
+name: Estuary Auth Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-auth-check.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  auth-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flowctl
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/flowctl \
+            https://github.com/estuary/flow/releases/latest/download/flowctl-x86_64-linux
+          sudo chmod +x /usr/local/bin/flowctl
+          flowctl --version
+
+      - name: Verify Estuary CI authentication
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          test -n "$FLOW_AUTH_TOKEN"
+          echo "=== ESTUARY AUTH ROLES ==="
+          flowctl auth roles list
+          echo "=== ESTUARY CATALOG ==="
+          flowctl catalog list
