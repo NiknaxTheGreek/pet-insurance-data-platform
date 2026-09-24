@@ -74,10 +74,13 @@ jobs:
       - name: Start PostgreSQL
         run: docker compose up -d postgres
 
-      - name: Wait for PostgreSQL health
+      - name: Wait for PostgreSQL initialization to complete
         run: |
-          for i in {1..30}; do
-            if docker compose exec -T postgres pg_isready -U insurance_app -d insurance; then
+          for i in {1..45}; do
+            if docker compose logs postgres 2>&1 | grep -q "PostgreSQL init process complete; ready for start up." \
+              && docker compose exec -T postgres pg_isready -U insurance_app -d insurance \
+              && docker compose exec -T postgres psql -U insurance_app -d insurance -tAc \
+                   "SELECT to_regclass('public.claims') IS NOT NULL" | grep -q "t"; then
               exit 0
             fi
             sleep 2
@@ -92,7 +95,9 @@ jobs:
 
       - name: Validate schema constraints and relationships
         run: |
-          docker compose exec -T postgres             psql -U insurance_app -d insurance -v ON_ERROR_STOP=1             < infra/postgres/smoke_test.sql
+          docker compose exec -T postgres \
+            psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 \
+            < infra/postgres/smoke_test.sql
 
       - name: Show container status
         if: always()
