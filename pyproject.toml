@@ -19,6 +19,9 @@ dev = [
   "pytest==9.1.1",
   "PyYAML==6.0.2",
 ]
+orchestration = [
+  "dagster==1.13.24",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
