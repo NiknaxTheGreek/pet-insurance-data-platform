@@ -1,0 +1,40 @@
+name: GCP Snowflake Integration Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-gcp-snowflake-readiness.trigger"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Check CREATE INTEGRATION privilege
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "SHOW GRANTS TO ROLE SNOWFLAKE_LEARNING_ROLE;" -x > /tmp/grants.txt
+          cat /tmp/grants.txt
+          if grep -q "CREATE INTEGRATION" /tmp/grants.txt; then
+            echo "GCP_SNOWFLAKE_CREATE_INTEGRATION_ASSERTION=PASS"
+          else
+            echo "GCP_SNOWFLAKE_CREATE_INTEGRATION_ASSERTION=FAIL"
+            exit 2
+          fi
