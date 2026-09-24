@@ -1,2 +1,2 @@
-trigger: 2026-09-24T13:47:00Z
-reason: verify-neon-logical-replication-readiness
+trigger: 2026-09-24T14:00:00Z
+reason: rerun-estuary-source-readiness-after-package-install-fix
