@@ -137,10 +137,9 @@ def _stage_records(
     sql = f"""
         INSERT INTO {STAGE_TABLE} (
             BATCH_ID, SOURCE_TABLE, SOURCE_PK, SOURCE_UPDATED_AT,
-            OPERATION, PAYLOAD, PAYLOAD_HASH
+            OPERATION, PAYLOAD, PAYLOAD_JSON, PAYLOAD_HASH
         )
-        SELECT
-            %s, %s, %s, %s, %s, PARSE_JSON(%s), %s
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
     rows = [
         (
