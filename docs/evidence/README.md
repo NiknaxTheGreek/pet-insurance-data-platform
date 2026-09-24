@@ -1,0 +1,16 @@
+# Executed evidence index
+
+The project treats a claim as verified only when it maps to code plus an executed workflow/query.
+
+| Capability | Run | Result |
+| --- | ---: | --- |
+| Hardened live batched ingestion + health | 35988189813 | PASS |
+| Extended reliability / late existing-key recovery / delete | 35989125299 | PASS |
+| Additive + breaking schema evolution | 35988832514 | PASS |
+| Transaction rollback atomicity | 35989925581 | PASS |
+| 10k-customer controlled scale benchmark | 35990122190 | PASS |
+| Security: gitleaks + dependency audit + static gate | 35990015486 | PASS |
+| Consolidated Platform CI | 35990015280 | PASS |
+| Dagster orchestration proof | 35990181134 | PASS |
+
+The evidence files in this directory contain the scenario, expected result, actual result and verification mechanism. They do not substitute screenshots for executable proof.
