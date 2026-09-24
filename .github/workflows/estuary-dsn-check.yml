@@ -1,0 +1,39 @@
+name: Estuary Source DSN Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-dsn-check.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  dsn-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project
+        run: |
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install -e . --no-deps
+
+      - name: Verify existing Neon DSN is usable for Estuary CDC
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+        run: |
+          python - <<'PY'
+          import os
+          from insurance_platform.estuary_flow_spec import parse_postgres_dsn
+          parsed = parse_postgres_dsn(os.environ["POSTGRES_DSN"])
+          print("ESTUARY_DSN_DIRECT_ASSERTION=PASS")
+          print("database=" + parsed["database"])
+          print("port=" + parsed["address"].rsplit(":", 1)[-1])
+          PY
