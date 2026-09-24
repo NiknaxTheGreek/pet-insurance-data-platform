@@ -166,3 +166,46 @@ def test_stage_records_uses_connector_safe_values_binding(monkeypatch):
     assert len(cursor.rows[0]) == 7
     assert cursor.rows[0][5].startswith("{")
     assert cursor.rows[0][6] == "abc123"
+
+
+def test_post_merge_failure_rolls_back_transaction(monkeypatch):
+    import insurance_platform.run_ingestion as runner
+
+    class Cursor:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, sql, params=None):
+            self.statements.append(sql.strip())
+
+    cursor = Cursor()
+    spec = TableSpec("claims", "claim_id")
+    watermark = Watermark(
+        datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc),
+        "CLM-TX-TEST",
+    )
+
+    monkeypatch.setenv("INGESTION_FAIL_AFTER_MERGE_TABLE", "claims")
+    monkeypatch.setattr(runner, "_count_unrepresented_staged", lambda *_: 1)
+    monkeypatch.setattr(runner, "_merge_staged_raw", lambda *_: None)
+    monkeypatch.setattr(
+        runner,
+        "_count_represented_staged",
+        lambda *_: pytest.fail("represented count must not run after injected failure"),
+    )
+
+    with pytest.raises(RuntimeError, match="Injected failure after RAW merge"):
+        runner._apply_staged_batch(
+            cursor,
+            spec=spec,
+            batch_id="batch-tx-test",
+            watermark_after=watermark,
+            candidate_count=1,
+            source_rows=1,
+            started_perf=0.0,
+            attempt=1,
+        )
+
+    assert cursor.statements[0] == "BEGIN"
+    assert cursor.statements[-1] == "ROLLBACK"
+    assert "COMMIT" not in cursor.statements
