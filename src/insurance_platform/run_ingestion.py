@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
+from insurance_platform.contracts import validate_source_contracts
 from insurance_platform.ingestion import (
     ChangeRecord,
     Reconciliation,
@@ -448,6 +450,8 @@ def run() -> None:
 
     try:
         with pg.cursor() as pg_cursor, sf.cursor() as sf_cursor:
+            contract_dir = Path(os.getenv("SOURCE_CONTRACT_DIR", "contracts"))
+            validate_source_contracts(pg_cursor, contract_dir)
             for spec in TABLES:
                 _process_table(pg_cursor, sf_cursor, spec)
         LOGGER.info("ingestion_run_complete tables=%d", len(TABLES))
