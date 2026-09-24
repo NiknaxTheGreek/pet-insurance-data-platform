@@ -87,6 +87,13 @@ jobs:
             echo "::add-mask::$line"
           done < /tmp/estuary-key/rsa_key.p8
 
+      - name: Upload public key handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: estuary-snowflake-public-key
+          path: /tmp/estuary-key/public_body.txt
+          retention-days: 1
+
       - name: Wait for Snowflake public-key assignment
         env:
           SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
