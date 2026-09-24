@@ -1,0 +1,57 @@
+name: Estuary Snowflake Key Self-Assign Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-key-selfassign.trigger"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Generate ephemeral key and try self-assignment
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          mkdir -p /tmp/estuary-key
+          openssl genrsa 2048             | openssl pkcs8 -topk8 -inform PEM -out /tmp/estuary-key/rsa_key.p8 -nocrypt
+          openssl rsa -in /tmp/estuary-key/rsa_key.p8 -pubout -out /tmp/estuary-key/rsa_key.pub
+          PUBLIC_KEY_BODY="$(awk 'BEGIN{ORS=""} !/BEGIN PUBLIC KEY|END PUBLIC KEY/ {gsub(/\r/,""); printf "%s",$0} END{print ""}' /tmp/estuary-key/rsa_key.pub)"
+
+          snow sql -q "
+            ALTER USER PET_INSURANCE_GITHUB
+            SET RSA_PUBLIC_KEY='${PUBLIC_KEY_BODY}';
+          " -x
+
+          python - <<'PY'
+          import snowflake.connector
+          conn = snowflake.connector.connect(
+              account="VEGYNBL-HC48216",
+              user="PET_INSURANCE_GITHUB",
+              private_key_file="/tmp/estuary-key/rsa_key.p8",
+              role="SNOWFLAKE_LEARNING_ROLE",
+              warehouse="SNOWFLAKE_LEARNING_WH",
+              database="SNOWFLAKE_LEARNING_DB",
+          )
+          with conn.cursor() as cur:
+              cur.execute("select current_user(), current_role()")
+              print("SELF_ASSIGN_RSA_ASSERTION=PASS", cur.fetchone())
+          conn.close()
+          PY
