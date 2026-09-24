@@ -1,71 +1,94 @@
 # Estuary Flow CDC proof
 
-Status: **READY FOR PROVIDER AUTHORIZATION — NOT YET EXECUTED IN ESTUARY**
+Status: **VERIFIED**
 
-The intended isolated proof is:
+Executed path:
 
-`Neon PostgreSQL public.claims → Estuary Flow collection → Snowflake PET_INSURANCE_ESTUARY.CLAIMS`
+`Neon PostgreSQL public.claims → PostgreSQL logical replication/WAL → Estuary Flow → Snowflake PET_INSURANCE_ESTUARY.CLAIMS`
 
-The existing custom Python ingestion remains in the repository because it demonstrates the mechanics directly. Estuary is a second path showing how the same production problem can be delegated to a managed CDC platform.
+The custom Python ingestion remains in the repository because it demonstrates watermarking, hashing, reconciliation, transaction boundaries and failure recovery directly. Estuary is the managed CDC path that proves true log-based insert/update/physical-delete capture.
 
-## Why this path
+## Source
 
-Estuary's Neon PostgreSQL connector uses PostgreSQL logical replication/WAL. The Snowflake materialization applies captured changes transactionally. This directly addresses the limitation of watermark polling: physical deletes and older change events are available from the replication stream rather than inferred from current table state.
+Verified:
+- Neon `wal_level=logical`
+- direct non-pooler endpoint
+- isolated publication `pet_insurance_estuary_publication`
+- published tables: `public.claims`, `public.flow_watermarks`
+- source role has replication capability
 
-## Source prerequisites
+The workflow derives the direct Neon endpoint from the existing secret at runtime; no additional PostgreSQL password is committed.
 
-Run:
+## Capture
 
-```bash
-python -m insurance_platform.estuary_source_readiness
-```
+Published Estuary objects:
+- capture: `Private77/pet-insurance/source-neon`
+- collection: `Private77/pet-insurance/public/claims`
+- connector: `ghcr.io/estuary/source-postgres:v3`
+- History Mode: enabled
 
-The command:
+The capture status reached `Streaming CDC Events`.
 
-1. requires `wal_level=logical`;
-2. creates `public.flow_watermarks`;
-3. creates isolated publication `pet_insurance_estuary_publication`;
-4. publishes only `public.flow_watermarks` and `public.claims`.
+A disposable source claim was executed through:
+1. INSERT
+2. UPDATE
+3. physical DELETE
 
-Logical replication must be enabled in Neon Project Settings before the command can succeed.
+Estuary emitted:
+- `_meta.op='c'`
+- `_meta.op='u'`
+- `_meta.op='d'`
 
-For the final Estuary connection, create a **dedicated Neon role** rather than reusing the application owner. Grant the role read access and use a **direct Neon connection string**, not a `-pooler` hostname.
+## Snowflake materialization
 
-## Capture configuration
-
-Use the Neon PostgreSQL connector:
-
-- image: `ghcr.io/estuary/source-postgres:v3`
-- database: `pet_insurance`
-- schema: `public`
-- stream: `claims`
-- publication: `pet_insurance_estuary_publication`
-- watermarks table: `public.flow_watermarks`
-- history mode: true for the proof so insert/update/delete events remain inspectable
-
-Credentials are entered only in Estuary and are not committed.
-
-## Snowflake destination
-
-Use a dedicated schema and service identity:
-
-- database: current project database
+Published:
+- materialization: `Private77/pet-insurance/materialize-snowflake`
+- connector: `ghcr.io/estuary/materialize-snowflake:v4`
+- database: `SNOWFLAKE_LEARNING_DB`
 - schema: `PET_INSURANCE_ESTUARY`
-- warehouse: X-Small / auto-suspend
-- auth: Snowflake JWT key-pair
-- `QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE`
+- table: `CLAIMS`
+- delta/history-preserving binding
 
-The private key belongs in Estuary's connector secret configuration and must never be committed.
+Authentication:
+- GitHub OIDC authenticates CI to Snowflake.
+- CI generates an ephemeral RSA keypair.
+- The public key is assigned to `PET_INSURANCE_GITHUB`.
+- JWT authentication is verified.
+- The private key exists only in the runner and is used to publish the Estuary connector config.
+- `QUOTED_IDENTIFIERS_IGNORE_CASE=FALSE` is enforced.
 
-## Acceptance proof
+Initial materialized history: **13 rows**.
 
-The integration is complete only after all of these are executed:
+For `CLM-EST-36033857733`, Snowflake contains:
 
-1. baseline claim appears in the Estuary-backed Snowflake table;
-2. insert a new isolated claim → destination receives it;
-3. update that claim → destination changes;
-4. physical DELETE that isolated claim → destination reflects the connector's configured delete semantics / metadata;
-5. capture/materialization status is healthy;
-6. evidence file records workflow/provider timestamps and Snowflake verification queries.
+| CLAIM_ID | _meta/op |
+| --- | --- |
+| CLM-EST-36033857733 | c |
+| CLM-EST-36033857733 | d |
+| CLM-EST-36033857733 | u |
 
-Until that happens this integration remains explicitly **not verified**.
+Aggregate assertion:
+- create events: **1**
+- update events: **1**
+- delete events: **1**
+- PASS
+
+## Evidence
+
+See:
+[`docs/evidence/estuary_cdc.md`](../../docs/evidence/estuary_cdc.md)
+
+Key runs:
+- capture publish: `36033392711`
+- collection read: `36033652085`
+- source C/U/D: `36033857733`
+- Snowflake materialization: `36040696100`
+- Snowflake C/U/D assertion: `36041150766`
+
+## Production caveat
+
+The bounded trial proof deliberately reuses:
+- `pet_insurance_owner` on Neon;
+- `PET_INSURANCE_GITHUB` and `SNOWFLAKE_LEARNING_ROLE` on Snowflake.
+
+A production deployment should use dedicated, least-privilege Estuary source and destination identities with environment-specific access and credential rotation.
