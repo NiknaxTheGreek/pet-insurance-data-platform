@@ -1,0 +1,68 @@
+name: Dagster Orchestration Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-dagster.trigger"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  dagster-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Install runtime and orchestration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion,orchestration]"
+          python -m pip install "dbt-snowflake==1.12.1"
+
+      - name: Execute Dagster job in-process
+        env:
+          POSTGRES_DSN: ${{ secrets.POSTGRES_DSN }}
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+          SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+          SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+        run: python -m insurance_platform.orchestration
+
+      - name: Verify orchestrated pipeline health
+        env:
+          SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+          SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+          SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND COUNT_IF(LATEST_STATUS = 'SUCCESS') = 5
+              AND COUNT_IF(LAST_RECONCILIATION_STATUS = 'CONSISTENT') = 5,
+              1, 0
+            ) AS DAGSTER_HEALTH_ASSERTION
+            FROM PET_INSURANCE_CONTROL.INGESTION_HEALTH;
+          " -x
