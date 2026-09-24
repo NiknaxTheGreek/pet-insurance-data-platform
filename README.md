@@ -21,6 +21,15 @@ PostgreSQL
 
 GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible PostgreSQL source. Dagster proves the same dependency chain can be expressed as an orchestrated workload.
 
+A second executed path proves managed log-based CDC:
+
+~~~text
+Neon PostgreSQL
+  → logical replication / WAL
+  → Estuary Flow
+  → Snowflake PET_INSURANCE_ESTUARY.CLAIMS
+~~~
+
 ## Current verified evidence
 
 - Live PostgreSQL → Snowflake set-based ingestion: PASS
@@ -35,7 +44,10 @@ GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible
 - Security gate (gitleaks + dependency audit + Ruff): PASS
 - Dagster orchestration proof: PASS
 - Controlled scale benchmark: PASS
-- Python tests: 21 passed
+- Estuary WAL capture: INSERT / UPDATE / physical DELETE PASS
+- Estuary → Snowflake materialization: PASS
+- Snowflake Estuary history: 1 create + 1 update + 1 delete for the disposable CDC claim
+- Python tests: 24 passed
 - dbt: 11 models + 67 tests; 78/78 build nodes passed
 
 Executed evidence is indexed in [docs/evidence/](docs/evidence/).
@@ -128,12 +140,10 @@ The live trial uses SNOWFLAKE_LEARNING_ROLE. A least-privilege production role b
 
 ## External integrations
 
-Two Badger-relevant integrations are packaged but are NOT YET provider-verified:
+- **Estuary Flow — VERIFIED.** Live Neon runs with `wal_level=logical`; Estuary captures PostgreSQL WAL events in History Mode; a controlled claim produced create, update and physical-delete events; the Estuary collection was materialized into Snowflake; Snowflake contains exactly one `c`, one `u` and one `d` event for the disposable claim. See [docs/evidence/estuary_cdc.md](docs/evidence/estuary_cdc.md).
+- **Google Cloud / GCS — NOT YET PROVIDER-VERIFIED.** Deterministic export, GitHub WIF workflow, private GCS upload, Snowflake external stage/COPY and reconciliation are implemented and CI-tested on the repo side. GCP authentication/project/WIF setup is still required.
 
-- Estuary Flow: source-readiness and Snowflake setup exist. Live Neon proved wal_level=replica; logical replication plus Estuary authentication are still required.
-- Google Cloud / GCS: deterministic export, GitHub WIF workflow, private GCS upload, Snowflake external stage/COPY and reconciliation are implemented and CI-tested on the repo side. GCP authentication/project/WIF setup is still required.
-
-See [docs/external_integrations.md](docs/external_integrations.md). No interview claim should describe either provider path as executed until its provider workflow is green.
+See [docs/external_integrations.md](docs/external_integrations.md) for the exact verification boundary.
 
 ## What broke while I built this
 
@@ -169,7 +179,7 @@ See [docs/reproduction.md](docs/reproduction.md) for live Snowflake execution.
 5. src/insurance_platform/reconcile_source_state.py
 6. dbt/models/
 7. docs/adr/
-8. GitHub Actions: Platform CI, Reliability, Transaction Atomicity, Scale Benchmark, Security Gate and Dagster proof
+8. GitHub Actions: Platform CI, Reliability, Transaction Atomicity, Scale Benchmark, Security Gate, Dagster proof and Estuary CDC proof
 
 ## Deliberate non-goals
 
