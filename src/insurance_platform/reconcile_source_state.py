@@ -85,10 +85,10 @@ def run() -> None:
                         "identity (table, pk, updated_at, payload_hash) with RAW"
                     ),
                 )
-                _stage_records(sf_cursor, current_versions, batch_id)
-
                 attempts_used = 0
                 try:
+                    _stage_records(sf_cursor, current_versions, batch_id)
+
                     def operation(attempt: int) -> Reconciliation:
                         nonlocal attempts_used
                         attempts_used = attempt
