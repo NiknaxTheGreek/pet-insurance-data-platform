@@ -336,6 +336,12 @@ def _apply_staged_batch(
     try:
         inserted = _count_unrepresented_staged(sf_cursor, batch_id)
         _merge_staged_raw(sf_cursor, batch_id)
+
+        if os.getenv("INGESTION_FAIL_AFTER_MERGE_TABLE") == spec.name:
+            raise RuntimeError(
+                f"Injected failure after RAW merge before watermark for {spec.name}"
+            )
+
         represented = _count_represented_staged(sf_cursor, batch_id)
 
         reconciliation = Reconciliation(
@@ -415,6 +421,14 @@ def _process_table(pg_cursor, sf_cursor, spec: TableSpec) -> Reconciliation:
             retry_count=max(attempts_used - 1, 0),
             exc=exc,
         )
+        try:
+            _cleanup_stage(sf_cursor, batch_id)
+        except BaseException:
+            LOGGER.exception(
+                "ingestion_stage_cleanup_failed table=%s batch_id=%s",
+                spec.name,
+                batch_id,
+            )
         LOGGER.exception(
             "ingestion_batch_failed table=%s batch_id=%s",
             spec.name,
