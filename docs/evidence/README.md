@@ -14,3 +14,13 @@ The project treats a claim as verified only when it maps to code plus an execute
 | Dagster orchestration proof | 35990181134 | PASS |
 
 The evidence files in this directory contain the scenario, expected result, actual result and verification mechanism. They do not substitute screenshots for executable proof.
+
+
+## External provider evidence status
+
+| Integration | Status | Evidence |
+| --- | --- | --- |
+| Estuary provider execution | BLOCKED / NOT VERIFIED | Neon readiness run 36009597153 proves wal_level=replica; Estuary login unavailable |
+| GCP/GCS provider execution | BLOCKED / NOT VERIFIED | repo package + deterministic export test exist; GCP login/project unavailable |
+
+These rows must not be promoted to PASS until provider-side execution is completed.
