@@ -1,0 +1,167 @@
+name: Scale Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-scale-benchmark.trigger"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  scale-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      POSTGRES_DSN: postgresql://insurance_app:insurance_dev@localhost:5432/insurance
+      SNOWFLAKE_ACCOUNT: VEGYNBL-HC48216
+      SNOWFLAKE_USER: PET_INSURANCE_GITHUB
+      SNOWFLAKE_ROLE: SNOWFLAKE_LEARNING_ROLE
+      SNOWFLAKE_WAREHOUSE: SNOWFLAKE_LEARNING_WH
+      SNOWFLAKE_DATABASE: SNOWFLAKE_LEARNING_DB
+      SNOWFLAKE_RAW_TABLE: PET_INSURANCE_BENCHMARK.SOURCE_RECORDS
+      SNOWFLAKE_WATERMARK_TABLE: PET_INSURANCE_BENCHMARK.INGESTION_WATERMARKS
+      SNOWFLAKE_BATCH_TABLE: PET_INSURANCE_BENCHMARK.INGESTION_BATCHES
+      SNOWFLAKE_STAGE_TABLE: PET_INSURANCE_BENCHMARK.INGESTION_STAGE
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtain Snowflake OIDC token
+        uses: snowflakedb/snowflake-actions@v3
+        with:
+          use-oidc: true
+          cli-version: "3.16.0"
+
+      - name: Install ingestion runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[ingestion]"
+
+      - name: Start clean PostgreSQL
+        run: docker compose up -d postgres
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U insurance_app -d insurance; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+
+      - name: Generate deterministic scale dataset
+        run: |
+          python - <<'PY' | tee benchmark-generate.txt
+          from pathlib import Path
+          from insurance_platform.generate_seed import generate
+          counts = generate(Path("data/benchmark"), n_customers=10000)
+          print(counts)
+          print("TOTAL_ROWS", sum(counts.values()))
+          PY
+
+      - name: Bulk load PostgreSQL with COPY
+        env:
+          SEED_DIR: data/benchmark
+        run: python -m insurance_platform.load_seed | tee benchmark-source-load.txt
+
+      - name: Validate source contracts at scale
+        run: python -m insurance_platform.validate_contracts
+
+      - name: Reset isolated Snowflake benchmark schema
+        run: snow sql -f infra/snowflake/benchmark_setup.sql -x
+
+      - name: First set-based ingestion
+        run: |
+          start=$(date +%s)
+          python -m insurance_platform.run_ingestion | tee benchmark-first-ingestion.txt
+          end=$(date +%s)
+          echo "FIRST_LOAD_WALL_SECONDS=$((end-start))" | tee benchmark-timing.txt
+
+      - name: Cross-system row reconciliation
+        run: python -m insurance_platform.benchmark_verify | tee benchmark-reconciliation.json
+
+      - name: No-change replay
+        run: |
+          start=$(date +%s)
+          python -m insurance_platform.run_ingestion | tee benchmark-replay.txt
+          end=$(date +%s)
+          echo "REPLAY_WALL_SECONDS=$((end-start))" | tee -a benchmark-timing.txt
+
+      - name: Verify benchmark audit and no-change replay
+        run: |
+          snow sql -q "
+            USE WAREHOUSE SNOWFLAKE_LEARNING_WH;
+            USE DATABASE SNOWFLAKE_LEARNING_DB;
+
+            WITH latest_per_table AS (
+              SELECT *
+              FROM PET_INSURANCE_BENCHMARK.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY SOURCE_TABLE
+                ORDER BY STARTED_AT DESC
+              ) = 1
+            )
+            SELECT 1 / IFF(
+              COUNT(*) = 5
+              AND SUM(ROWS_EXTRACTED) = 0
+              AND SUM(ROWS_INSERTED) = 0,
+              1, 0
+            ) AS NO_CHANGE_REPLAY_ASSERTION
+            FROM latest_per_table;
+
+            WITH first_per_table AS (
+              SELECT *
+              FROM PET_INSURANCE_BENCHMARK.INGESTION_BATCHES
+              WHERE GITHUB_RUN_ID = '${{ github.run_id }}'
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY SOURCE_TABLE
+                ORDER BY STARTED_AT ASC
+              ) = 1
+            )
+            SELECT
+              SOURCE_TABLE,
+              SOURCE_ROWS,
+              ROWS_EXTRACTED,
+              ROWS_INSERTED,
+              DURATION_MS,
+              RETRY_COUNT,
+              RECONCILIATION_STATUS
+            FROM first_per_table
+            ORDER BY SOURCE_TABLE;
+
+            SELECT
+              COUNT(*) AS RAW_ROWS,
+              COUNT(DISTINCT SOURCE_TABLE || '|' || SOURCE_PK) AS DISTINCT_SOURCE_KEYS
+            FROM PET_INSURANCE_BENCHMARK.SOURCE_RECORDS;
+          " -x | tee benchmark-snowflake.txt
+
+      - name: Upload benchmark evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: scale-benchmark-evidence
+          path: |
+            benchmark-generate.txt
+            benchmark-source-load.txt
+            benchmark-first-ingestion.txt
+            benchmark-reconciliation.json
+            benchmark-replay.txt
+            benchmark-timing.txt
+            benchmark-snowflake.txt
+
+      - name: Tear down PostgreSQL
+        if: always()
+        run: docker compose down -v
