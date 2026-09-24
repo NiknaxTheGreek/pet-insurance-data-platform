@@ -13,6 +13,7 @@ on:
       - "contracts/**"
       - "docker-compose.yml"
       - "pyproject.toml"
+      - "requirements/**"
       - ".github/workflows/platform-ci.yml"
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - "contracts/**"
       - "docker-compose.yml"
       - "pyproject.toml"
+      - "requirements/**"
       - ".github/workflows/platform-ci.yml"
 
 permissions:
@@ -42,11 +44,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install package and test tools
+      - name: Install locked toolchain
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m pip install pytest ruff
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install --no-deps -e .
+          python -m pip check
 
       - name: Static Python checks
         run: ruff check src tests --select E9,F --ignore F401
@@ -66,10 +68,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install contract validation runtime
+      - name: Install locked contract runtime
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[ingestion]"
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install --no-deps -e .
+          python -m pip check
 
       - name: Start PostgreSQL
         run: docker compose up -d postgres
@@ -122,10 +125,11 @@ jobs:
           use-oidc: true
           cli-version: "3.16.0"
 
-      - name: Install dbt adapter
+      - name: Install locked dbt toolchain
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "dbt-snowflake==1.12.1"
+          python -m pip install -r requirements/ci.lock.txt
+          python -m pip install --no-deps -e .
+          python -m pip check
 
       - name: dbt debug
         env: &snowflake_env
