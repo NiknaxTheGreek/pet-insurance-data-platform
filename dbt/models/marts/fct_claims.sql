@@ -10,22 +10,22 @@ with payments as (
 )
 
 select
-    c.claim_id,
-    c.policy_id,
-    c.pet_id,
-    d.customer_id,
-    d.province,
-    d.plan_type,
-    d.species,
-    d.breed,
-    c.claim_type,
-    c.claim_status,
-    c.claim_date,
-    c.claim_amount,
-    c.approved_amount,
-    coalesce(p.paid_amount, 0) as paid_amount,
-    p.latest_payment_date,
-    c.source_updated_at
+    c.claim_id::varchar as claim_id,
+    c.policy_id::varchar as policy_id,
+    c.pet_id::varchar as pet_id,
+    d.customer_id::varchar as customer_id,
+    d.province::varchar as province,
+    d.plan_type::varchar as plan_type,
+    d.species::varchar as species,
+    d.breed::varchar as breed,
+    c.claim_type::varchar as claim_type,
+    c.claim_status::varchar as claim_status,
+    c.claim_date::date as claim_date,
+    c.claim_amount::number(18, 2) as claim_amount,
+    c.approved_amount::number(18, 2) as approved_amount,
+    coalesce(p.paid_amount, 0)::number(18, 2) as paid_amount,
+    p.latest_payment_date::date as latest_payment_date,
+    c.source_updated_at::timestamp_tz as source_updated_at
 from {{ ref('stg_claims') }} c
 join {{ ref('dim_policy') }} d
   on c.policy_id = d.policy_id
