@@ -22,7 +22,7 @@ if ! gcloud iam workload-identity-pools describe "$POOL_ID"   --location=global 
 fi
 
 if ! gcloud iam workload-identity-pools providers describe "$PROVIDER_ID"   --workload-identity-pool="$POOL_ID"   --location=global   --project="$PROJECT_ID" >/dev/null 2>&1; then
-  gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID"     --workload-identity-pool="$POOL_ID"     --location=global     --project="$PROJECT_ID"     --display-name="GitHub pet-insurance-data-platform"     --issuer-uri="https://token.actions.githubusercontent.com"     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref"     --attribute-condition="assertion.repository=='$REPOSITORY'"
+  gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID"     --workload-identity-pool="$POOL_ID"     --location=global     --project="$PROJECT_ID"     --display-name="GitHub pet-insurance-data-platform"     --issuer-uri="https://token.actions.githubusercontent.com"     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref"     --attribute-condition="assertion.repository=='$REPOSITORY' && assertion.ref=='refs/heads/main'"
 fi
 
 if ! gcloud iam service-accounts describe "$SERVICE_ACCOUNT_EMAIL"   --project="$PROJECT_ID" >/dev/null 2>&1; then
@@ -34,8 +34,10 @@ PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locati
 gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_EMAIL"   --project="$PROJECT_ID"   --role="roles/iam.workloadIdentityUser"   --member="$PRINCIPAL_SET" >/dev/null
 
 if ! gcloud storage buckets describe "gs://$BUCKET_NAME"   --project="$PROJECT_ID" >/dev/null 2>&1; then
-  gcloud storage buckets create "gs://$BUCKET_NAME"     --project="$PROJECT_ID"     --location="$LOCATION"     --default-storage-class=STANDARD     --uniform-bucket-level-access     --public-access-prevention
+  gcloud storage buckets create "gs://$BUCKET_NAME"     --project="$PROJECT_ID"     --location="$LOCATION"     --default-storage-class=STANDARD     --uniform-bucket-level-access
 fi
+
+gcloud storage buckets update "gs://$BUCKET_NAME" --public-access-prevention >/dev/null
 
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET_NAME"   --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL"   --role="roles/storage.objectAdmin" >/dev/null
 
