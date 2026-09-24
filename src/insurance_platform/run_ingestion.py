@@ -149,6 +149,7 @@ def _stage_records(
             record.source_updated_at,
             record.operation,
             canonical_json(record.payload),
+            canonical_json(record.payload),
             record.payload_hash,
         )
         for record in records
