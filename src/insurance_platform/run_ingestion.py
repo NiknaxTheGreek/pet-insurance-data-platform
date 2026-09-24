@@ -150,6 +150,7 @@ def _stage_records(
             record.source_updated_at,
             record.operation,
             canonical_json(record.payload),
+            canonical_json(record.payload),
             record.payload_hash,
         )
         for record in records
@@ -188,7 +189,7 @@ def _merge_staged_raw(sf_cursor, batch_id: str) -> None:
                 SOURCE_PK,
                 SOURCE_UPDATED_AT,
                 OPERATION,
-                PAYLOAD,
+                PARSE_JSON(PAYLOAD_JSON) AS PAYLOAD,
                 PAYLOAD_HASH,
                 BATCH_ID
             FROM {STAGE_TABLE}
