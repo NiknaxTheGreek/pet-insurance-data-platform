@@ -1,0 +1,35 @@
+name: Estuary Collection Read
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "ops/run-estuary-read.trigger"
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flowctl
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/flowctl \
+            https://github.com/estuary/flow/releases/latest/download/flowctl-x86_64-linux
+          sudo chmod +x /usr/local/bin/flowctl
+
+      - name: Read captured claims collection
+        env:
+          FLOW_AUTH_TOKEN: ${{ secrets.FLOW_AUTH_TOKEN }}
+        run: |
+          flowctl collections read \
+            --collection Private77/pet-insurance/public/claims \
+            | tee /tmp/claims.jsonl
+          test -s /tmp/claims.jsonl
+          grep -q '"claim_id"' /tmp/claims.jsonl
+          echo "ESTUARY_INITIAL_BACKFILL_ASSERTION=PASS"
