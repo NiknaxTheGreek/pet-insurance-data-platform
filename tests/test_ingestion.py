@@ -159,10 +159,11 @@ def test_stage_records_uses_connector_safe_values_binding(monkeypatch):
 
     _stage_records(cursor, [record], "batch-test", batch_size=100)
 
-    assert "VALUES (%s, %s, %s, %s, %s, %s, %s)" in cursor.sql
+    assert "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)" in cursor.sql
     assert "PARSE_JSON" not in cursor.sql
     assert "PAYLOAD_JSON" in cursor.sql
     assert len(cursor.rows) == 1
-    assert len(cursor.rows[0]) == 7
+    assert len(cursor.rows[0]) == 8
+    assert cursor.rows[0][5] == cursor.rows[0][6]
     assert cursor.rows[0][5].startswith("{")
-    assert cursor.rows[0][6] == "abc123"
+    assert cursor.rows[0][7] == "abc123"
