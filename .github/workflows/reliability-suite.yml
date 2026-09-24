@@ -220,7 +220,7 @@ jobs:
             SELECT 1 / IFF(
               COUNT(*) = 1
               AND MAX(CLAIM_AMOUNT) = 2600
-              AND MAX(SOURCE_UPDATED_AT) = TIMESTAMP_TZ '2026-09-21 14:00:00+00',
+              AND MAX(SOURCE_UPDATED_AT) = TO_TIMESTAMP_TZ('2026-09-21 14:00:00+00'),
               1, 0
             ) AS EXISTING_KEY_CURRENT_VERSION_ASSERTION
             FROM current_version;
