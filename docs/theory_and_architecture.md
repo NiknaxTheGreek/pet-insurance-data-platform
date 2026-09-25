@@ -26,6 +26,16 @@ Neon PostgreSQL
 
 GitHub Actions runs the automated checks and live proof workflows. Docker provides a reproducible PostgreSQL environment. Dagster expresses the dependency order of the main data tasks.
 
+### Operational system versus analytical system
+
+The source and warehouse are separated because they solve different problems.
+
+**PostgreSQL** is the operational system. It is designed around transactions such as submitting a claim, updating a policy or recording a payment. This is an OLTP-style workload: many relatively small reads and writes that support the running application.
+
+**Snowflake** is the analytical system. It is used for transformations, history, aggregates and reporting across larger volumes of data. This is an OLAP-style workload.
+
+Running large analytical scans and joins directly against the production PostgreSQL database could make application work compete for CPU, memory, disk I/O and database connections. Moving analytical work to Snowflake isolates those workloads and gives dbt a warehouse designed for transformation and reporting.
+
 ## 2. Core technologies
 
 | Term | Meaning here |
@@ -48,7 +58,9 @@ GitHub Actions runs the automated checks and live proof workflows. Docker provid
 
 **CDC stands for Change Data Capture.**
 
-CDC is the process of detecting changes made in a source database and carrying those changes into another system.
+CDC is the process of detecting changes made in a source database and propagating those changes into another system. The important distinction is between the **pattern** and the **tool**: CDC describes what the pipeline is doing; Estuary Flow is the managed product used in this project to implement a log-based CDC path.
+
+CDC is useful because a changing source does not need to be copied in full after every update. At scale, transmitting and processing the relevant changes can reduce source load, data transfer and repeated processing.
 
 For example, a claim may change over time:
 
@@ -221,7 +233,7 @@ reconciliation
 
 ## 7. Snowflake layers
 
-Snowflake separates storage and transformation responsibilities into schemas:
+Snowflake separates ingestion state from transformation and business-facing analytics:
 
 ~~~text
 RAW
@@ -240,13 +252,15 @@ MARTS
 business-facing analytical models
 ~~~
 
+**RAW is the ingestion boundary.** It keeps source versions close to the form in which they arrived. That source-faithful layer makes it possible to trace a downstream number back to an input, compare transformed data with the ingested record, and rebuild downstream models after transformation logic changes. RAW is therefore useful for auditability and reprocessing, but it is not a substitute for PostgreSQL backup or disaster-recovery procedures.
+
 RAW stores source payloads as Snowflake VARIANT, which can hold parsed JSON.
 
-The dbt layers convert those payloads into typed relational columns.
+The dbt layers convert those payloads into typed relational columns. STAGING gives consistent names and types; INTERMEDIATE holds reusable business logic; MARTS expose curated datasets shaped for analysis and reporting.
 
 ## 8. dbt and analytical models
 
-dbt executes SQL transformations inside Snowflake.
+dbt is the transformation framework used after ingestion. It does not store the source data itself; it executes version-controlled SQL inside Snowflake, manages model dependencies, and attaches tests and documentation to those models.
 
 The model path is:
 
@@ -256,6 +270,8 @@ RAW
 → INTERMEDIATE
 → MARTS
 ~~~
+
+A **mart** is a curated analytical dataset intended for a specific business use. It shields analysts and BI tools from source-oriented RAW structures and exposes stable measures and dimensions instead.
 
 **Grain** means what one row represents.
 
