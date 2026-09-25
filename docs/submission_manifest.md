@@ -57,7 +57,7 @@ Repository: `NiknaxTheGreek/pet-insurance-data-platform`
 - GCS → Snowflake code is implemented but not provider-executed because available GCP projects have billing disabled and bucket creation returns HTTP 403.
 - BigQuery Sandbox is the executed GCP capability proof; it is not presented as a substitute for production GCS architecture.
 - The 82,956-row benchmark is controlled evidence, not a production-scale throughput claim.
-- Kafka, Spark, Kubernetes and Terraform are intentionally absent because the use case does not justify them.
+- No production scheduler, message bus, distributed-compute engine, Kubernetes runtime, infrastructure-as-code deployment, enterprise monitoring/catalog platform or BI dashboard is claimed. Reasonable alternatives and adoption triggers are documented in `docs/adr/005-scope-cost-and-tooling.md`.
 
 ## Primary review path
 
