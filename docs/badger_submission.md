@@ -24,7 +24,7 @@ If an attachment is useful, use the frozen Drive checkpoint:
 
 Subject:
 
-`Pet Insurance Data Platform — Snowflake, dbt, PostgreSQL and CDC`
+`Pet Insurance Data Platform — Snowflake, dbt, PostgreSQL and Change Data Capture`
 
 Message:
 
@@ -32,7 +32,7 @@ Hi Jo,
 
 Following our conversation, I built a small production-style insurance data platform to demonstrate the engineering capabilities we discussed in a concrete way.
 
-The project models a mutable pet-insurance workload in PostgreSQL, incrementally propagates changes into Snowflake, transforms them through dbt and exposes tested analytical marts. I focused specifically on CDC/incremental processing, historical correctness, idempotency, reconciliation, data quality, observability, CI/CD and engineering trade-offs rather than adding technologies for their own sake.
+The project models a mutable pet-insurance workload in PostgreSQL, incrementally propagates changes into Snowflake, transforms them through dbt and exposes tested analytical marts. I focused on change data capture (CDC), incremental processing, historical correctness, idempotency, reconciliation, data quality, observability and CI/CD.
 
 Repository:
 https://github.com/NiknaxTheGreek/pet-insurance-data-platform
@@ -57,7 +57,7 @@ Nicholas
 
 ## 30-second explanation
 
-“I built a production-style pet-insurance data platform around a mutable PostgreSQL source. The custom Python path uses batched incremental capture, append-only Snowflake RAW, payload hashing, transactional watermark updates and full-state reconciliation. dbt reconstructs current state and exposes tested marts. I also implemented a second, real CDC path using Neon logical replication and Estuary Flow: a disposable claim was inserted, updated, physically deleted and all three WAL events were materialized into Snowflake. The project therefore proves both the mechanics of incremental engineering and a managed log-based CDC approach.”
+“I built a pet-insurance data platform around a mutable PostgreSQL source. Change data capture means detecting inserts, updates and deletes and carrying those changes downstream. The Python path captures new source versions incrementally into append-only Snowflake RAW and reconciles late records. dbt reconstructs current state and exposes tested marts. A second path uses Neon logical replication and Estuary Flow to capture insert, update and physical-delete events from PostgreSQL's transaction log into Snowflake.”
 
 ## Two-minute explanation
 
@@ -179,17 +179,15 @@ Say:
 
 Close with:
 
-“I would not call this a full production insurance platform. It is a bounded capability proof with explicit compromises and a reproducible evidence trail.”
+“The repository shows the complete data path, the controls around it and the evidence used to verify the result.”
 
 ## Likely technical questions
 
-### “Is this real CDC?”
+### “How does change data capture work here?”
 
 Answer:
 
-“There are two separate paths. The custom Python implementation is not WAL-based CDC; it uses a composite `updated_at + primary key` watermark plus payload hashing, version preservation and full-state reconciliation. I keep that distinction explicit because it demonstrates the mechanics and failure modes directly.
-
-Separately, I implemented and executed a real managed CDC path with Neon logical replication and Estuary Flow. Neon is running with `wal_level=logical`; Estuary captures the PostgreSQL WAL stream in History Mode; a disposable claim produced create, update and physical-delete events; and Snowflake contains exactly one `c`, one `u` and one `d` event for that claim. So I would call the Estuary path true log-based CDC, but not the custom watermark path.”
+“CDC means Change Data Capture: detecting inserts, updates and deletes in a source and carrying those changes downstream. The Python path detects new source versions using a composite `updated_at + primary key` watermark and recovers late versions through reconciliation. The Estuary path reads PostgreSQL logical-replication events from WAL, including physical deletes. Both paths land change history in Snowflake using different detection mechanisms.”
 
 ### “Why not Airflow?”
 
@@ -254,25 +252,6 @@ The repository still contains the production-style GitHub OIDC/WIF → private G
 Answer:
 
 “The dbt incremental claim-event model originally used `raw_record_id > max(raw_record_id)`. Backfill testing showed that older RAW IDs could be absent from the target even though the target already had a higher max ID. That meant a max-only predicate could never recover them. I changed the model to a `NOT EXISTS` anti-join on its unique event key and verified RAW and modeled claim history both contain all eight versions.”
-
-## What not to say
-
-Avoid saying:
-
-- “This is production-ready.”
-- “This is true PostgreSQL CDC” without the watermark/reconciliation qualification.
-- “The loss ratio is actuarially correct.”
-- “The performance test proves production scale.”
-- “The Snowflake least-privilege role is implemented.” It is proposed; the verified trial uses the learning role.
-- “I used Kafka/Airflow because production systems should use them.” They are intentionally absent.
-
-Prefer:
-
-- “production-style”
-- “verified capability proof”
-- “CDC semantics using watermark + reconciliation”
-- “bounded implementation with explicit trade-offs”
-- “tested against controlled failure scenarios”
 
 ## Best review order for Badger
 
