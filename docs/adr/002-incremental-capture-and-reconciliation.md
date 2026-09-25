@@ -14,7 +14,7 @@ Normal ingestion uses a composite source watermark:
 
 ordered lexicographically. Each table stores its last processed timestamp and primary key in Snowflake CONTROL.
 
-This fast path is complemented by a reconciliation/backfill path that compares source primary keys with RAW and inserts missing keys idempotently.
+This fast path is complemented by a reconciliation/backfill path that compares the complete source-version identity `(source_table, source_pk, source_updated_at, payload_hash)` with RAW and inserts missing versions idempotently.
 
 At the dbt level, `int_claim_events` uses an anti-join on `raw_record_id` rather than only `raw_record_id > max(raw_record_id)`. This was changed after live evidence exposed two historical RAW rows that a max-only predicate would never recover.
 
@@ -25,7 +25,7 @@ The design separates two problems:
 - efficient normal change capture
 - correctness recovery when late/backfilled data violates high-watermark assumptions
 
-The controlled reliability suite proved both behaviors: a deliberately late claim was missed by the normal watermark scan, then recovered exactly once by reconciliation.
+The controlled reliability suite proved both behaviors for a new late key and for a later version of an existing key: the normal watermark scan missed the deliberately old versions, and reconciliation recovered each missing source version exactly once.
 
 ## Consequences
 
