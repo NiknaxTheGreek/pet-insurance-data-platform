@@ -4,7 +4,7 @@
 [![Reliability](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml)
 [![Security](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/security.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/security.yml)
 
-Production-style data platform for mutable pet-insurance data, with incremental history capture and change data capture (CDC).
+Production-style data platform for mutable pet-insurance data, with incremental history capture and database change tracking.
 
 ## Problem
 
@@ -19,7 +19,7 @@ flowchart LR
     INT --> MARTS[dbt MARTS]
 
     NEON[(Neon PostgreSQL WAL)] --> EST[Estuary Flow]
-    EST --> CDC[(Snowflake CDC history)]
+    EST --> HIST[(Snowflake change history)]
 ```
 
 GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible PostgreSQL source. Dagster proves the same dependency chain can be expressed as an orchestrated workload.
