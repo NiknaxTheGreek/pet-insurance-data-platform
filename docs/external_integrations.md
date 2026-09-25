@@ -41,27 +41,38 @@ Trial limitation:
 - the live proof reuses the existing Neon owner role and Snowflake GitHub service user / learning role.
 - production would use separate least-privilege CDC identities.
 
-## Google Cloud / GCS
+## Google Cloud
 
-Status: **BLOCKED_BY_PROVIDER_AUTH — NOT VERIFIED**
+Status: **VERIFIED VIA BIGQUERY SANDBOX**
 
-Completed in repository:
-- deterministic PostgreSQL claims export.
-- source manifest with SHA-256, row count, claim amount sum and ID bounds.
-- unit test proving deterministic export/manifest.
-- GitHub→GCP Workload Identity Federation workflow.
-- private GCS upload commands.
-- reproducible GCP WIF + private-bucket bootstrap script.
-- Snowflake GCS storage-integration template.
-- Snowflake external stage + COPY path.
-- source-manifest→Snowflake reconciliation code.
-- temporary WIF credential files are gitignored.
+Executed provider path:
 
-Remaining provider actions:
-- authenticate/select a GCP project.
-- run the committed WIF/bucket bootstrap.
-- set GitHub repository variables for project/provider/service account/bucket.
-- create the Snowflake GCS storage integration and grant its generated Google service account read access to only the proof bucket.
-- execute `GCP GCS Backfill Proof` and record reconciliation output.
+`Authenticated Google Cloud Shell → deterministic claims export → BigQuery Sandbox dataset/table → GoogleSQL reconciliation`
 
-Until that workflow is green, GCP remains a ready-but-unverified integration package.
+Verified:
+- Google Cloud project selected in authenticated Cloud Shell.
+- BigQuery API enabled.
+- typed claims dataset/table created.
+- deterministic CSV loaded.
+- source manifest compared against BigQuery row count, amount sum and ID bounds.
+- final committed runner returned `GCP_BIGQUERY_SANDBOX_ASSERTION=PASS`.
+- no billing account or credit card was attached for the proof.
+
+Evidence:
+[`docs/evidence/gcp_bigquery_sandbox.md`](evidence/gcp_bigquery_sandbox.md)
+
+### GCS / Snowflake production extension
+
+Status: **IMPLEMENTED BUT NOT PROVIDER-EXECUTED**
+
+The repository includes:
+- GitHub→GCP WIF bootstrap hardened to immutable repository IDs;
+- private GCS bucket configuration;
+- deterministic upload/manifest path;
+- Snowflake storage-integration template;
+- external stage/COPY;
+- reconciliation code.
+
+Provider execution is blocked because the available GCP projects have billing disabled and GCS bucket creation returns HTTP 403. The project intentionally does not attach billing only to satisfy a demo requirement.
+
+This distinction must remain explicit in interviews.
