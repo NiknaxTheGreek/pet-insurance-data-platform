@@ -1,4 +1,5 @@
 name: Platform CI
+# Consolidated reviewer-facing CI: Python, Docker/PostgreSQL and Snowflake/dbt.
 
 on:
   workflow_dispatch:
