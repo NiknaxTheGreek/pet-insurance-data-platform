@@ -2,11 +2,6 @@ name: Transaction Atomicity
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "ops/run-transaction-atomicity.trigger"
 
 permissions:
   id-token: write

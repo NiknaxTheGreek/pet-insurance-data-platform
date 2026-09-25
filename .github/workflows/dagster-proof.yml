@@ -2,11 +2,6 @@ name: Dagster Orchestration Proof
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "ops/run-dagster.trigger"
 
 permissions:
   id-token: write

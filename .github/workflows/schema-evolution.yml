@@ -2,11 +2,6 @@ name: Schema Evolution
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "ops/run-schema-evolution.trigger"
 
 jobs:
   schema-evolution:

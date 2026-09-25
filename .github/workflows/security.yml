@@ -15,9 +15,6 @@ on:
       - "integrations/**"
       - "requirements/**"
       - "Makefile"
-      - "integrations/**"
-      - "requirements/**"
-      - "Makefile"
   pull_request:
     paths:
       - "src/**"

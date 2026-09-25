@@ -2,11 +2,6 @@ name: Scale Benchmark
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "ops/run-scale-benchmark.trigger"
 
 permissions:
   id-token: write

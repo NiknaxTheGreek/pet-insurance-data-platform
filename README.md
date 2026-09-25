@@ -10,14 +10,17 @@ Production-style ELT / CDC capability proof for a mutable pet-insurance workload
 
 Operational PostgreSQL records change after creation: claims progress through states, approved amounts change, payments arrive later, customer attributes change, and rows can be soft-deleted. A simple overwrite or timestamp-only batch can lose history or miss late data.
 
-~~~text
-PostgreSQL
-  → Python incremental capture + full-state reconciliation
-  → Snowflake RAW / CONTROL
-  → dbt STAGING
-  → dbt INTERMEDIATE
-  → dbt MARTS
-~~~
+```mermaid
+flowchart LR
+    PG[(PostgreSQL)] --> PY[Python incremental capture + reconciliation]
+    PY --> RAW[(Snowflake RAW / CONTROL)]
+    RAW --> STG[dbt STAGING]
+    STG --> INT[dbt INTERMEDIATE]
+    INT --> MARTS[dbt MARTS]
+
+    NEON[(Neon PostgreSQL WAL)] --> EST[Estuary Flow]
+    EST --> CDC[(Snowflake CDC history)]
+```
 
 GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible PostgreSQL source. Dagster proves the same dependency chain can be expressed as an orchestrated workload.
 
@@ -172,17 +175,16 @@ make postgres-down
 
 See [docs/reproduction.md](docs/reproduction.md) for live Snowflake execution.
 
-## Review path
+## Five-minute review path
 
-1. README
-2. docs/evidence/
-3. docs/runbook.md
-4. src/insurance_platform/run_ingestion.py
-5. src/insurance_platform/reconcile_source_state.py
-6. dbt/models/
-7. docs/adr/
-8. GitHub Actions: Platform CI, Reliability, Transaction Atomicity, Scale Benchmark, Security Gate, Dagster proof and Estuary CDC proof
-9. GCP BigQuery Sandbox evidence
+1. Start here: architecture, verified evidence and explicit limitations in this README.
+2. Evidence index: [docs/evidence/README.md](docs/evidence/README.md).
+3. Ingestion mechanics: [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py).
+4. Analytical modeling: [dbt/models/](dbt/models/).
+5. Operations and decisions: [docs/runbook.md](docs/runbook.md) and [docs/adr/](docs/adr/).
+6. GitHub Actions proof: Platform CI, Reliability Failure Suite, Transaction Atomicity, Scale Benchmark, Security Gate, Dagster Orchestration Proof and Estuary CDC Mutation Proof.
+
+One-off diagnostic workflows used during development were intentionally removed from the final review surface; their executed run history and evidence remain documented.
 
 ## Deliberate non-goals
 

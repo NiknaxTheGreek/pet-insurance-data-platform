@@ -60,7 +60,7 @@ Check GitHub OIDC identity and environment:
 - `SNOWFLAKE_WAREHOUSE`
 - `SNOWFLAKE_DATABASE`
 
-Use `Snowflake OIDC Deploy` to verify workload identity and platform objects.
+Use `make snowflake-deploy` to deploy/verify platform objects, and use the `Platform CI` Snowflake/dbt job to verify the GitHub OIDC execution path.
 
 Never replace OIDC with a committed password or private key.
 
@@ -189,7 +189,7 @@ Never edit code to embed credentials.
 
 After rotation:
 1. run Security Gate;
-2. run Snowflake OIDC Deploy;
+2. run Platform CI and, when object deployment must be revalidated, `make snowflake-deploy`;
 3. run Live Incremental Ingestion;
 4. verify `INGESTION_HEALTH`.
 

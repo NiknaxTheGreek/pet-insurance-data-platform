@@ -2,11 +2,6 @@ name: Reliability Failure Suite
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "ops/run-reliability-suite.trigger"
 
 permissions:
   id-token: write
