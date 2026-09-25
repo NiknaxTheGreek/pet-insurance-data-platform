@@ -113,7 +113,7 @@ Narrative:
 - T3 — APPROVED, amount revised to R11,200, approved R9,700
 - T4 — PAID, payment R9,700
 
-Open the successful T4 workflow and show that the immediate replay inserted zero rows.
+Open the focal claim history in the README, then show `docs/evidence/live_ingestion.md` and the successful `Live Incremental Ingestion` run demonstrating that an unchanged replay inserted zero rows.
 
 ### 2:15–3:00 — Show failure handling
 
@@ -211,7 +211,7 @@ Answer:
 
 Answer:
 
-“The normal fast path uses the composite watermark. I deliberately proved that a sufficiently old late record can fall behind that watermark. Reconciliation compares source keys with RAW and recovers missing records idempotently. That failure scenario is automated in CI.”
+“The normal fast path uses the composite watermark. I deliberately proved that a sufficiently old late record can fall behind that watermark. Reconciliation compares complete source-version identities with RAW and recovers missing versions idempotently. That failure scenario is automated in CI.”
 
 ### “Why VARIANT in RAW?”
 
