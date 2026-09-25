@@ -42,7 +42,7 @@ The manifest contains SHA-256 of the exact CSV, row count, claim-amount sum, and
 
 ## Why not GCS in this account?
 
-The GCS/WIF implementation remains under `integrations/gcp/` and `.github/workflows/gcp-backfill.yml`.
+The GCS/WIF implementation remains under `integrations/gcp/` as a production-style extension.
 
 Provider execution is blocked because both available projects have `billingEnabled: false`. Attempted GCS bucket creation returned HTTP 403 because the project has no active billing account.
 

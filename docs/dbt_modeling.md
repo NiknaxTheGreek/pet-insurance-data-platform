@@ -2,6 +2,10 @@
 
 ## Purpose
 
+dbt (data build tool) manages SQL transformations, tests, contracts and lineage **inside** the Snowflake warehouse. Snowflake stores and executes the analytical data; dbt defines how RAW data becomes trusted analytical models. dbt does not perform the PostgreSQL → Snowflake extraction.
+
+For definitions of dbt, Snowflake, materializations, grain, facts, dimensions and SCD Type 2, see [concepts.md](concepts.md).
+
 The dbt layer converts append-only source history in Snowflake RAW into typed current-state models, reusable intermediate logic, historical event models, and business-facing marts.
 
 ## Layering
@@ -24,7 +28,7 @@ The models type JSON/VARIANT payload values into Snowflake dates, timestamps, de
 
 ### INTERMEDIATE
 
-`int_claim_events` is an incremental model. It stores each claim version and processes only RAW rows whose monotonically increasing `raw_record_id` is greater than the maximum already materialized. This gives a dbt-level incremental example in addition to source ingestion watermarks.
+`int_claim_events` is an incremental model keyed by `raw_record_id`. On incremental runs it uses an explicit `NOT EXISTS` anti-join against already materialized RAW_RECORD_ID values, so a previously missing older event can still be inserted. This gives a dbt-level incremental example without assuming that MAX(raw_record_id) alone proves completeness.
 
 `int_policy_claims` reduces current claims and payments to one row per policy with:
 - claim count
@@ -62,9 +66,9 @@ The dbt project tests:
 
 Verified CI build:
 - 11 models
-- 56 data tests
-- 67 total dbt build nodes
-- PASS=67
+- 67 tests
+- 78 total dbt build nodes
+- PASS=78
 - WARN=0
 - ERROR=0
 - SKIP=0

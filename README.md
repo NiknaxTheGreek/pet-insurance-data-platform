@@ -33,6 +33,34 @@ Neon PostgreSQL
   → Snowflake PET_INSURANCE_ESTUARY.CLAIMS
 ~~~
 
+## How to read this repository
+
+Two reading paths are provided deliberately:
+
+- **Technical reviewer:** stay in this README, then use [docs/evidence/](docs/evidence/), [docs/runbook.md](docs/runbook.md) and the implementation files linked below.
+- **Learner / candidate preparing to defend the project:** start with [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md), then use [docs/concepts.md](docs/concepts.md) whenever a term is unfamiliar.
+
+The walkthrough maps the project from data-analyst skills through analytics engineering into data engineering. The concepts guide defines the technologies in project context rather than assuming prior platform knowledge.
+
+## Technology roles
+
+| Technology / concept | Role in this project |
+| --- | --- |
+| SQL | Language used to define, query, transform and test relational data |
+| PostgreSQL | Operational relational source containing customers, pets, policies, claims and payments |
+| Python | Incremental extraction, version identity, batching, reconciliation and reliability logic |
+| Snowflake | Analytical warehouse holding RAW history, CONTROL state and dbt models |
+| dbt | SQL transformation, testing, contracts, lineage and analytical modeling inside Snowflake |
+| Git | Version-control system that records the repository's change history |
+| GitHub | Repository host and automation platform; GitHub Actions runs CI and proof workflows |
+| Docker | Reproducible local PostgreSQL runtime |
+| Dagster | Orchestration proof for dependency ordering and retries |
+| Neon | Managed PostgreSQL source used for the logical-replication/WAL CDC proof |
+| Estuary Flow | Managed CDC platform that reads Neon WAL changes and materializes history into Snowflake |
+| BigQuery | Independent GCP analytical-warehouse proof using deterministic batch loading and reconciliation |
+
+See [docs/concepts.md](docs/concepts.md) for precise definitions of CDC, WAL, watermarks, idempotency, MERGE, reconciliation, SCD2, OIDC and related terms.
+
 ## Current verified evidence
 
 - Live PostgreSQL → Snowflake set-based ingestion: PASS

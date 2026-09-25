@@ -10,6 +10,11 @@ Frozen review branch:
 
 https://github.com/NiknaxTheGreek/pet-insurance-data-platform/tree/submission-final-2026-09-25
 
+Guided technical documentation:
+- concepts and technology definitions: `docs/concepts.md`
+- analyst → analytics engineer → data engineer walkthrough: `docs/engineering_walkthrough.md`
+- exact reproduction commands: `docs/reproduction.md`
+
 Do not lead with the ZIP unless they specifically ask for an offline copy. The GitHub repository is the strongest presentation because the reviewer can see the code, documentation, commit history, Actions evidence and architecture in one place.
 
 If an attachment is useful, use the frozen Drive checkpoint:

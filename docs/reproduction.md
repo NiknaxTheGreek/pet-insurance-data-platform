@@ -2,9 +2,18 @@
 
 ## Local verification
 
+If Git, PostgreSQL, Snowflake, dbt, OIDC, CDC or the other platform terms are unfamiliar, read [concepts.md](concepts.md) first. The file-by-file implementation order is in [engineering_walkthrough.md](engineering_walkthrough.md).
+
 Requirements:
-- Python 3.12 recommended
-- Docker with Docker Compose
+
+| Tool | What it is | Why it is needed here |
+| --- | --- | --- |
+| Git | distributed version control | clone and inspect the repository history |
+| Python 3.12 | programming/runtime environment | tests, ingestion and utilities |
+| Docker + Docker Compose | container runtime and service definition | reproduce a clean PostgreSQL source locally |
+| PostgreSQL client knowledge | relational SQL source concepts | understand the operational schema and smoke tests |
+| Snowflake access | cloud analytical warehouse | live RAW/CONTROL and dbt execution |
+| dbt | SQL transformation framework | build and test staging/intermediate/marts |
 
 Bootstrap and test:
 
@@ -103,31 +112,19 @@ GCP_BIGQUERY_SANDBOX_ASSERTION=PASS
 
 The runner loads a deterministic typed claims dataset into BigQuery Sandbox and reconciles it against its SHA-256/source aggregate manifest.
 
-The production-style GCS → Snowflake implementation remains under `integrations/gcp/` and `.github/workflows/gcp-backfill.yml`, but provider execution requires a billing-enabled GCP project.
+The production-style GCS → Snowflake implementation remains under `integrations/gcp/`, but provider execution requires a billing-enabled GCP project.
 
 ## Main verification workflows
 
 - `Platform CI` — consolidated Python, Docker/PostgreSQL and Snowflake/dbt gate
-- `Live Incremental Ingestion` — live custom source path
+- `Live Incremental Ingestion` — live custom PostgreSQL → Snowflake path
 - `Reliability Failure Suite` — invalid-data, late-arrival/version and delete scenarios
 - `Transaction Atomicity` — injected rollback proof
 - `Schema Evolution` — additive acceptance + breaking rejection
 - `Scale Benchmark` — deterministic 82,956-row ingestion/replay proof
-- `Security Gate` — gitleaks, dependency audit, static/shell checks
+- `Security Gate` — gitleaks, dependency audit, static and shell checks
 - `Dagster Orchestration Proof` — dependency-chain execution
-- `Estuary Neon Capture` — WAL capture publish
-- `Estuary CDC Mutation Proof` — create/update/physical-delete proof
-- `Estuary Snowflake Materialization` — managed CDC destination
-- `Estuary Snowflake CDC Evidence` — final Snowflake history assertion
+- `Estuary CDC Mutation Proof` — managed WAL create/update/physical-delete proof
+- `Submission Package` — reproducible review-package checkpoint
 
-## Secrets and identities
-
-Never commit:
-- PostgreSQL DSN;
-- Estuary refresh token;
-- Snowflake OIDC token;
-- private RSA keys.
-
-Persistent secrets used by provider workflows are held in repository secret storage. Snowflake CI uses short-lived GitHub OIDC. Estuary's Snowflake JWT private key is generated ephemerally by CI for the trial proof.
-
-See `docs/runbook.md` for operational recovery procedures.
+Provider-side Estuary setup/materialization runs and the manual BigQuery Sandbox proof are retained in the evidence documentation even though one-off diagnostic workflows were removed from the final review surface.

@@ -2,6 +2,14 @@
 
 This document is deliberately strict: an integration is marked VERIFIED only after provider-side execution succeeds.
 
+Terminology:
+- **Neon** is the managed PostgreSQL source used for the real CDC proof.
+- **WAL** is PostgreSQL's write-ahead log, the transaction log from which logical replication exposes row changes.
+- **Estuary Flow** is the managed CDC/data-integration platform that consumes those logical changes and materializes them into Snowflake.
+- **BigQuery** is Google's analytical warehouse used for the independent GCP batch/reconciliation proof.
+
+For fuller definitions and the distinction between the custom watermark path and true log-based CDC, see [concepts.md](concepts.md).
+
 ## Estuary Flow
 
 Status: **VERIFIED**

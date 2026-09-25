@@ -1,6 +1,8 @@
-# GCP / GCS historical backfill proof
+# GCP / GCS historical backfill extension
 
-Status: **READY FOR PROVIDER AUTHORIZATION — NOT YET EXECUTED IN GCP**
+Status: **IMPLEMENTED DESIGN — NOT PROVIDER-EXECUTED**
+
+This directory retains the production-style object-storage extension. The verified no-billing GCP proof is BigQuery Sandbox; see [BIGQUERY_SANDBOX.md](BIGQUERY_SANDBOX.md).
 
 Path:
 
@@ -29,16 +31,16 @@ Snowflake requires a GCS storage integration.
 3. Grant the returned Snowflake GCP service account `roles/storage.objectViewer` on the proof bucket.
 4. Keep the bucket private.
 
-## Workflow
+## Intended execution path
 
-`GCP GCS Backfill Proof` will:
+In a billing-enabled GCP environment the implementation is designed to:
 
-1. export claims deterministically from live PostgreSQL;
+1. export claims deterministically from PostgreSQL;
 2. write a manifest containing SHA-256, row count, claim-amount sum and ID bounds;
 3. authenticate GitHub→GCP through WIF;
-4. upload the CSV + manifest to `gs://<bucket>/pet-insurance-backfill/`;
+4. upload the CSV + manifest to a private GCS prefix;
 5. create a Snowflake external stage against that prefix;
-6. `COPY INTO PET_INSURANCE_GCP.CLAIMS_BACKFILL`;
-7. reconcile Snowflake row count / amount sum / ID bounds against the source manifest.
+6. COPY INTO PET_INSURANCE_GCP.CLAIMS_BACKFILL;
+7. reconcile Snowflake row count, amount sum and ID bounds against the source manifest.
 
-The integration is not complete until that workflow is green.
+This path is intentionally documented as an extension rather than verified provider execution.
