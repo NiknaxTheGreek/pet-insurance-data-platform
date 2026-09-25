@@ -69,7 +69,7 @@ I then use dbt to move through staging, intermediate and mart layers. Staging re
 
 I also built failure scenarios because I wanted the project to demonstrate reliability rather than just successful queries. An invalid payment date is ingested, the dbt rule fails, the source is repaired and the test then passes. I insert a deliberately late claim with a timestamp older than the current watermark; normal ingestion misses it, then reconciliation recovers it exactly once. I also soft-delete a claim and verify that RAW preserves the delete while the trusted mart excludes it.
 
-The whole project is exercised through GitHub Actions. Snowflake uses OIDC rather than a stored Snowflake password, PostgreSQL is reproducible in Docker, the current Python suite is 25/25 passing, and dbt passes all 78 build nodes. I also executed a no-billing GCP proof in authenticated Cloud Shell using BigQuery Sandbox: a deterministic claims extract was loaded into a typed BigQuery table and reconciled with GoogleSQL against its source manifest.”
+The main repository pipelines are exercised through GitHub Actions. Snowflake uses OIDC rather than a stored Snowflake password, PostgreSQL is reproducible in Docker, the current Python suite is 25/25 passing, and dbt passes all 78 build nodes. The no-billing GCP proof is the explicit exception: I executed it manually in authenticated Cloud Shell using BigQuery Sandbox, where a deterministic claims extract was loaded into a typed BigQuery table and reconciled with GoogleSQL against its source manifest.”
 
 ## Five-minute technical walkthrough
 
@@ -109,9 +109,9 @@ Use `CLM-10042`.
 
 Narrative:
 
-- T1 — SUBMITTED, R8,500
-- T3 — APPROVED, amount revised to R11,200, approved R9,700
-- T4 — PAID, payment R9,700
+1. SUBMITTED — R8,500
+2. APPROVED — amount revised to R11,200; approved R9,700
+3. PAID — payment R9,700
 
 Open the focal claim history in the README, then show `docs/evidence/live_ingestion.md` and the successful `Live Incremental Ingestion` run demonstrating that an unchanged replay inserted zero rows.
 
