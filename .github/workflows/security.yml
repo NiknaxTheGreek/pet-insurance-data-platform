@@ -75,4 +75,5 @@ jobs:
       - name: Validate integration shell scripts
         run: |
           bash -n integrations/gcp/bootstrap_gcp.sh
+          bash -n integrations/gcp/run_bigquery_sandbox.sh
           bash -n integrations/estuary/generate_keypair.sh
