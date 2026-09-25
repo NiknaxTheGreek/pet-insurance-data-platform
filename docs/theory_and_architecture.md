@@ -1,39 +1,92 @@
-# Theory and architecture guide
+# Architecture and core concepts
 
-This guide contains the minimum theory needed to understand and defend the project. It explains the important concepts in project context without duplicating the implementation line-by-line.
+This document explains the main ideas used by the pet-insurance data platform and how they fit together.
 
-The project demonstrates a progression from data analysis to analytics engineering and data engineering:
+## 1. System overview
+
+The platform starts with operational insurance data in PostgreSQL and produces tested analytical models in Snowflake.
 
 ~~~text
-business question
-→ relational source
-→ incremental ingestion
-→ historical warehouse
-→ tested analytical models
-→ automated verification
+PostgreSQL
+→ Python ingestion
+→ Snowflake RAW / CONTROL
+→ dbt STAGING
+→ dbt INTERMEDIATE
+→ dbt MARTS
 ~~~
 
-## 1. Core technologies
+A second data path captures PostgreSQL change events through the database transaction log:
 
-| Term | Meaning in this project |
+~~~text
+Neon PostgreSQL
+→ PostgreSQL WAL / logical replication
+→ Estuary Flow
+→ Snowflake change history
+~~~
+
+GitHub Actions runs the automated checks and live proof workflows. Docker provides a reproducible PostgreSQL environment. Dagster expresses the dependency order of the main data tasks.
+
+## 2. Core technologies
+
+| Term | Meaning here |
 | --- | --- |
-| SQL | Language used to define, query, join, aggregate and test relational data |
+| SQL | Language used to create, query, join, aggregate and test relational data |
 | PostgreSQL | Operational relational database containing customers, pets, policies, claims and payments |
-| Python | Implements incremental extraction, hashing, staging, reconciliation and reliability logic |
-| Snowflake | Analytical warehouse storing source history, ingestion state and dbt outputs |
+| Python | Reads source changes, builds version identities, stages data and performs reconciliation |
+| Snowflake | Analytical warehouse storing historical source versions, ingestion state and analytical models |
 | dbt | Organizes SQL transformations, tests, contracts and lineage inside Snowflake |
-| Git | Version-control system that records project history |
+| Git | Version-control system that records changes to the project |
 | GitHub | Hosts the Git repository and runs automation through GitHub Actions |
-| Docker | Recreates the PostgreSQL source consistently |
-| OIDC | Short-lived workload identity used by GitHub Actions to authenticate to Snowflake |
-| Dagster | Demonstrates orchestration of dependent data tasks |
-| Neon | Managed PostgreSQL used for the log-based CDC proof |
-| Estuary Flow | Managed CDC platform that reads PostgreSQL logical-replication events |
-| BigQuery | Independent Google Cloud analytical-warehouse proof |
+| Docker | Recreates the PostgreSQL source environment consistently |
+| OIDC | Short-lived identity mechanism used by GitHub Actions to authenticate to Snowflake |
+| Dagster | Orchestrates dependent data tasks |
+| Neon | Managed PostgreSQL used by the log-based change-capture path |
+| Estuary Flow | Managed service that reads PostgreSQL change events and materializes them downstream |
+| BigQuery | Google Cloud analytical warehouse used for an independent batch/reconciliation proof |
 
-Git is not GitHub. SQL is not PostgreSQL. Snowflake is not dbt. dbt does not copy the source database into Snowflake.
+## 3. What CDC means
 
-## 2. Business and relational model
+**CDC stands for Change Data Capture.**
+
+CDC is the process of detecting changes made in a source database and carrying those changes into another system.
+
+For example, a claim may change over time:
+
+~~~text
+SUBMITTED
+→ APPROVED
+→ PAID
+~~~
+
+A downstream warehouse should learn about each change instead of seeing only the final row.
+
+Typical database changes are:
+
+~~~text
+INSERT  → a new row appears
+UPDATE  → an existing row changes
+DELETE  → a row is removed
+~~~
+
+This project demonstrates two ways to detect change:
+
+**Incremental row scanning**
+
+The Python pipeline reads PostgreSQL rows in the order:
+
+~~~text
+(updated_at, primary_key)
+~~~
+
+and stores each new source version in Snowflake.
+
+**Log-based capture**
+
+The Estuary path reads PostgreSQL's transaction log through logical replication and captures insert, update and delete events directly.
+
+Both approaches keep downstream data synchronized with a changing source, but they observe changes differently.
+
+## 4. Relational source model
 
 The operational source contains five related entities:
 
@@ -45,32 +98,37 @@ customer
         → claim payment
 ~~~
 
-A **primary key** uniquely identifies a row, for example claim_id.
+A **primary key** uniquely identifies a row, such as claim_id.
 
-A **foreign key** requires a relationship to point to an existing row, for example claims.policy_id → policies.policy_id.
-
-A **constraint** enforces a source rule such as:
+A **foreign key** connects one table to another, such as:
 
 ~~~text
-approved amount <= claim amount
-monthly premium >= 0
+claims.policy_id → policies.policy_id
+~~~
+
+A **constraint** enforces a rule directly in the database.
+
+Examples:
+
+~~~text
+approved_amount <= claim_amount
+monthly_premium >= 0
 policy end date >= policy start date
 ~~~
 
-These rules belong in PostgreSQL because invalid operational state should be rejected as early as possible.
+Each mutable table also stores:
 
-Every mutable table also has:
-- created_at;
-- updated_at;
-- is_deleted.
+~~~text
+created_at
+updated_at
+is_deleted
+~~~
 
-updated_at supports incremental extraction. is_deleted provides observable soft-delete semantics.
+updated_at records when the current row last changed. is_deleted represents a soft delete while keeping the row available for history and relationships.
 
-The source is reproducible through Docker, and a smoke test proves both the complete relationship chain and database constraint enforcement.
+## 5. Source contracts
 
-## 3. Source contracts
-
-The YAML files under contracts/ describe the structure the ingestion system agrees to consume.
+The YAML files under contracts/ describe the structure expected by the ingestion process.
 
 They define:
 - required columns;
@@ -79,55 +137,38 @@ They define:
 - primary key;
 - data classification.
 
-The live PostgreSQL structure is inspected through information_schema before ingestion.
+Before ingestion, the live PostgreSQL schema is inspected through information_schema.
 
-The compatibility policy is intentionally simple:
+The compatibility rules are:
 
 ~~~text
-new additive column
-→ allowed and logged
+additive column
+→ accepted and logged
 
-missing required column
+required column missing
 → rejected
 
-incompatible type/nullability/key change
+incompatible type, nullability or primary-key change
 → rejected
 ~~~
 
-This separates **database schema creation** from **ingestion compatibility**.
+This lets the source evolve in compatible ways while stopping changes that could invalidate the pipeline.
 
-Data classification also distinguishes direct PII, quasi-identifiers, financial fields and operational metadata.
+## 6. Incremental ingestion
 
-## 4. Incremental ingestion
+The Python ingestion process keeps track of its progress with a **watermark**.
 
-The custom data path is:
-
-~~~text
-PostgreSQL
-→ Python
-→ Snowflake RAW / CONTROL
-→ dbt
-~~~
-
-It is an incremental batch design, not WAL-based CDC.
-
-### Composite watermark
-
-The fast path remembers:
+The watermark contains:
 
 ~~~text
 (updated_at, primary_key)
 ~~~
 
-rather than timestamp alone.
+The timestamp orders changes over time. The primary key breaks ties when multiple records share the same timestamp.
 
-The primary key breaks ties when multiple rows share the same updated_at value.
+Each extracted row is serialized consistently and hashed with SHA-256.
 
-### Version identity
-
-Each source row is serialized deterministically and hashed with SHA-256.
-
-A captured version is identified by:
+A source version is identified by:
 
 ~~~text
 source table
@@ -136,73 +177,76 @@ source table
 + payload hash
 ~~~
 
-This supports idempotency: replaying the same version does not create another RAW record.
+This makes replay idempotent: processing the same source version again does not create another historical copy.
 
 ### Staging and MERGE
 
-Candidate rows are placed in a Snowflake staging table.
+Candidate rows are first written to a Snowflake staging table.
 
-Snowflake then performs a set-based MERGE into append-only RAW.
+Snowflake then performs a set-based MERGE into the RAW history table.
 
-RAW is append-only because the warehouse must retain historical source versions rather than overwrite them.
+RAW is append-only, so new versions are added while previous versions remain available.
 
-### Atomicity
+### Transaction boundary
 
-The critical operation is one transaction:
+Three pieces of state belong together:
 
 ~~~text
-MERGE RAW
-+ advance watermark
-+ mark batch SUCCESS
+RAW version
+watermark
+successful batch audit
 ~~~
 
-Either all three commit or all three roll back.
+They are committed in one Snowflake transaction.
 
-This prevents the dangerous state where progress says data was processed even though the data was not committed.
+If that transaction fails, all three roll back together.
 
 ### Reconciliation
 
-A high watermark is efficient but cannot detect every late-arriving version.
+A late source record can have an updated_at value older than the current watermark.
 
-The project therefore has a second correctness path that scans current source state and compares complete version identity against RAW.
+Reconciliation scans the current source state and checks whether each complete source-version identity exists in RAW.
 
-This allows late new records and late changed versions to be recovered without moving the normal watermark backwards.
+Missing versions are inserted without moving the watermark backwards.
 
-The important distinction is:
+The two mechanisms therefore work together:
 
 ~~~text
-watermark = efficient normal path
-reconciliation = bounded correctness path
+watermark
+→ efficient incremental reading
+
+reconciliation
+→ recovery of missing current source versions
 ~~~
 
-## 5. Snowflake layers
+## 7. Snowflake layers
 
-Snowflake is divided by responsibility:
+Snowflake separates storage and transformation responsibilities into schemas:
 
 ~~~text
 RAW
-captured historical source versions
+historical source versions
 
 CONTROL
-watermarks, batches, stage and health state
+watermarks, batch audits, staging and ingestion health
 
 STAGING
 typed current-state views
 
 INTERMEDIATE
-reusable logic and claim history
+reusable transformations and historical claim events
 
 MARTS
-analyst-facing business models
+business-facing analytical models
 ~~~
 
-RAW uses Snowflake VARIANT to preserve source payloads as semi-structured JSON.
+RAW stores source payloads as Snowflake VARIANT, which can hold parsed JSON.
 
-The analytical layers convert those payloads into typed relational columns.
+The dbt layers convert those payloads into typed relational columns.
 
-## 6. dbt and analytical modeling
+## 8. dbt and analytical models
 
-dbt runs SQL transformations inside Snowflake.
+dbt executes SQL transformations inside Snowflake.
 
 The model path is:
 
@@ -234,77 +278,76 @@ MART_PORTFOLIO_PERFORMANCE
 → one province × species × plan type
 ~~~
 
-Grain must be understood before joining or aggregating data.
+A **fact table** contains measurable business activity. FCT_CLAIMS contains claim, approved and paid amounts.
 
-### Fact and dimension
-
-A **fact table** contains measurable business events. FCT_CLAIMS contains claim, approved and paid amounts.
-
-A **dimension** provides descriptive context. DIM_POLICY provides plan, geography and pet attributes.
+A **dimension** supplies descriptive context. DIM_POLICY contains plan, geography and pet attributes.
 
 ### SCD Type 2
 
-A Type-2 slowly changing dimension preserves attribute history instead of overwriting it.
+A Type-2 slowly changing dimension preserves attribute history.
 
-If a customer changes province, the model can retain both the old and current version using effective_from, effective_to and is_current.
+If a customer changes province, the model can retain:
 
-### Business tests
+~~~text
+Gauteng      → historical version
+Western Cape → current version
+~~~
 
-dbt tests rules such as:
+using effective_from, effective_to and is_current.
+
+### Data-quality tests
+
+dbt checks rules such as:
 - approved amount cannot exceed claim amount;
 - payment cannot occur before the claim;
 - paid amount cannot exceed approved amount;
 - claim pet must match policy pet;
-- claim date must fall within policy term;
-- exactly one current customer-history row must exist;
-- direct customer PII must not appear in marts.
+- claim date must fall inside the policy term;
+- one current customer-history row must exist;
+- direct customer PII must stay out of marts.
 
-A green pipeline means code ran. These tests help establish that the resulting data is also logically valid.
+## 9. Portfolio metrics
 
-## 7. Portfolio metrics
-
-The portfolio mart groups data by:
+The portfolio mart groups policies and claims by:
 
 ~~~text
 province × species × plan type
 ~~~
 
-and calculates measures such as:
+Measures include:
 - policy count;
-- active policies;
+- active policy count;
 - monthly premium book;
 - claim count;
-- paid claims;
-- average claim severity;
-- claims per policy.
+- incurred claim amount;
+- approved claim amount;
+- paid claim amount;
+- claims per policy;
+- average claim severity.
 
-The model also includes a **paid loss-ratio proxy**:
+The paid loss-ratio proxy uses:
 
 ~~~text
 paid claims
-──────────────
+────────────────────────
 monthly premium × 12
 ~~~
 
-It is deliberately called a proxy because the source does not contain actuarial earned-premium exposure.
+The source does not contain earned-premium exposure, so this metric uses annualized current premium as its denominator.
 
-The project does not present this as a production actuarial loss ratio.
+## 10. Automation and security
 
-## 8. CI, security and reproducibility
+Git records the project history.
 
-Git records the source history.
+GitHub Actions runs automated verification.
 
-GitHub hosts the project and GitHub Actions automates verification.
-
-Platform CI proves three layers:
+Platform CI checks:
 
 ~~~text
-Python tests/static checks
+Python tests and static checks
 → clean Docker/PostgreSQL source
 → Snowflake/dbt build
 ~~~
-
-The Snowflake job runs after the first two succeed.
 
 Security checks include:
 - Gitleaks for committed secrets;
@@ -312,9 +355,9 @@ Security checks include:
 - Ruff static checks;
 - shell syntax validation.
 
-Snowflake automation uses GitHub OIDC/workload identity rather than a stored Snowflake password.
+Snowflake authentication from GitHub uses OIDC workload identity, which provides a short-lived credential to the workflow.
 
-The Makefile provides stable commands such as:
+The Makefile provides repeatable commands such as:
 
 ~~~text
 make test
@@ -323,149 +366,91 @@ make dbt-build
 make snowflake-deploy
 ~~~
 
-This makes the project reproducible without requiring a reviewer to reconstruct command order manually.
+## 11. Orchestration
 
-## 9. Orchestration
-
-CI and orchestration are different concepts.
-
-**CI** validates changes.
-
-**Orchestration** coordinates dependent data tasks.
-
-Dagster demonstrates:
+Dagster expresses the main task order:
 
 ~~~text
 validate source contracts
 → ingest
 → dbt build
-→ verify health
+→ verify ingestion health
 ~~~
 
-A permanent Dagster service is intentionally not added because the bounded project does not require one.
+This allows dependencies and retries to be expressed as one data workflow.
 
-## 10. True WAL-based CDC
+## 12. PostgreSQL WAL and Estuary Flow
 
-A second data path proves actual PostgreSQL log-based change capture:
+**WAL** stands for Write-Ahead Log.
 
-~~~text
-Neon PostgreSQL
-→ logical replication / WAL
-→ Estuary Flow
-→ Snowflake
-~~~
+PostgreSQL records committed database changes in this transaction log.
 
-**WAL** means Write-Ahead Log: PostgreSQL's transaction log.
+**Logical replication** exposes those changes as row-level events that another system can consume.
 
-**Logical replication** exposes committed row-level changes such as insert, update and delete.
+A PostgreSQL **publication** defines which tables are available to that replication stream.
 
-A PostgreSQL **publication** defines which tables are available to a logical-replication consumer.
-
-The Estuary proof uses:
-- Neon with wal_level=logical;
-- a direct non-pooler PostgreSQL endpoint;
+The Estuary path uses:
+- Neon PostgreSQL with wal_level=logical;
+- a direct PostgreSQL endpoint;
 - a scoped publication;
 - Estuary History Mode.
 
-A disposable claim is:
-1. inserted;
-2. updated;
-3. physically deleted.
+The verification performs three source operations on a disposable claim:
 
-The resulting create, update and delete events are verified downstream and materialized into Snowflake.
+~~~text
+INSERT
+UPDATE
+DELETE
+~~~
 
-This demonstrates something the watermark design cannot do after a physical row has disappeared.
+The downstream collection and Snowflake history are then checked for one create, one update and one delete event.
 
-## 11. Two change-capture approaches
+Because the DELETE is read from PostgreSQL's log, it can still be captured after the source row has physically disappeared.
 
-| Property | Python watermark path | Estuary WAL path |
-| --- | --- | --- |
-| Detection | updated_at + primary key | PostgreSQL transaction log |
-| Physical delete | not after row disappears | yes |
-| Hashing/reconciliation logic | explicit in project | managed by connector path |
-| Transparency for learning | high | more abstracted |
-| Purpose here | demonstrate engineering mechanics | prove genuine log-based CDC |
+## 13. BigQuery proof
 
-Neither approach is claimed to be universally better.
+The Google Cloud path generates a deterministic claims file and a manifest containing expected row count and aggregate values.
 
-Architecture should follow requirements such as latency, source behavior, scale and operational cost.
+The file is loaded into a typed BigQuery table.
 
-## 12. GCP proof
+BigQuery results are then compared with the manifest.
 
-The verified GCP path uses BigQuery Sandbox.
+This verifies the same general pattern used elsewhere in the project:
 
-A deterministic claims file and source manifest are loaded into a typed BigQuery table.
+~~~text
+move data
+→ calculate independent expectations
+→ reconcile destination results
+~~~
 
-Warehouse aggregates are reconciled back to the manifest.
+A separate GCS-to-Snowflake implementation remains in the repository. Provider-side execution requires a billing-enabled GCP project for bucket creation.
 
-The repository also retains a production-style GCS → Snowflake design, but that provider path is explicitly marked unexecuted because the available GCP project cannot create the required bucket without billing.
+## 14. End-to-end example
 
-This distinction between implemented design and executed proof is intentional.
-
-## 13. Engineering scope
-
-The project deliberately does not add Kafka, Spark, Kubernetes or a permanent orchestration service merely to increase technology count.
-
-The core capability is demonstrated with:
+For claim CLM-10042:
 
 ~~~text
 PostgreSQL
-Python
-Snowflake
-dbt
-Docker
-GitHub Actions
+SUBMITTED
+→ APPROVED
+→ PAID
 ~~~
 
-Additional components are included only when they prove a distinct concept:
-- Dagster → orchestration;
-- Neon + Estuary → WAL CDC;
-- BigQuery → transferable cloud warehouse capability.
+The Python pipeline captures each new source version in Snowflake RAW.
 
-## 14. Competency progression
+dbt exposes:
+- all captured claim versions in INT_CLAIM_EVENTS;
+- the latest current claim in FCT_CLAIMS.
 
-**Data analyst**
-- SQL;
-- joins;
-- aggregation;
-- business metrics;
-- data validation.
+The final fact row contains:
 
-**Analytics engineer**
-- model grain;
-- dbt;
-- staging/intermediate/marts;
-- facts and dimensions;
-- tests;
-- SCD2;
-- contracts.
+~~~text
+claim status     PAID
+claim amount     R11,200
+approved amount  R9,700
+paid amount      R9,700
+~~~
 
-**Data engineer**
-- PostgreSQL source design;
-- incremental ingestion;
-- Snowflake;
-- transactions;
-- idempotency;
-- reconciliation;
-- schema compatibility;
-- observability.
+An unchanged replay produces no additional source version.
 
-**Platform-oriented data engineer**
-- Git/GitHub;
-- Docker;
-- CI/CD;
-- workload identity;
-- security gates;
-- orchestration;
-- WAL-based CDC;
-- cloud integration.
-
-The progression is not about accumulating tools. It is about taking increasing responsibility for how trustworthy data is created, validated and operated.
-
-## 15. Minimal mental model
-
-The entire project can be reduced to:
-
-> PostgreSQL owns mutable operational truth. Python captures source versions safely into append-only Snowflake RAW. Reconciliation closes watermark gaps. dbt turns RAW history into typed current-state and historical analytical models. Tests enforce business and governance rules. GitHub Actions makes the system reproducible and verifiable. Estuary separately proves genuine PostgreSQL WAL CDC.
-
-For exact commands use [reproduction.md](reproduction.md). For operations and recovery use [runbook.md](runbook.md). For executed proof use [evidence/](evidence/).
+For exact commands see [reproduction.md](reproduction.md). For operational procedures see [runbook.md](runbook.md). Executed results are under [evidence/](evidence/).
