@@ -1,29 +1,18 @@
-from decimal import Decimal
+from __future__ import annotations
 
-from insurance_platform.gcp_bigquery_sandbox import generate_rows
+import hashlib
+import json
 
-
-def test_bigquery_sandbox_dataset_is_deterministic():
-    first = generate_rows(10)
-    second = generate_rows(10)
-    assert first == second
-    assert len(first) == 10
-    assert first[0]["claim_id"] == "BQ-CLM-000001"
-    assert first[-1]["claim_id"] == "BQ-CLM-000010"
+from insurance_platform.gcp_bigquery_sandbox_export import run
 
 
-def test_bigquery_sandbox_dataset_contains_expected_business_shape():
-    rows = generate_rows(100)
-    assert {row["claim_status"] for row in rows} == {
-        "SUBMITTED",
-        "ASSESSED",
-        "APPROVED",
-        "PAID",
-        "REJECTED",
-    }
-    assert {row["claim_type"] for row in rows} == {
-        "ACCIDENT",
-        "ILLNESS",
-        "ROUTINE_CARE",
-    }
-    assert all(Decimal(str(row["claim_amount"])) > 0 for row in rows)
+def test_bigquery_sandbox_export_manifest(tmp_path):
+    manifest_path = run(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    csv_bytes = (tmp_path / "claims_sandbox.csv").read_bytes()
+
+    assert manifest["row_count"] == 3
+    assert manifest["claim_amount_sum"] == "22000.00"
+    assert manifest["min_claim_id"] == "GCP-CLM-001"
+    assert manifest["max_claim_id"] == "GCP-CLM-003"
+    assert manifest["sha256"] == hashlib.sha256(csv_bytes).hexdigest()
