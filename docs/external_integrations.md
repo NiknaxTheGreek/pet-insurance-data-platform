@@ -8,7 +8,7 @@ Terminology:
 - **Estuary Flow** is the managed CDC/data-integration platform that consumes those logical changes and materializes them into Snowflake.
 - **BigQuery** is Google's analytical warehouse used for the independent GCP batch/reconciliation proof.
 
-For fuller definitions and the distinction between the custom watermark path and true log-based CDC, see [concepts.md](concepts.md).
+For fuller definitions and the distinction between the custom watermark path and true log-based CDC, see [theory_and_architecture.md](theory_and_architecture.md).
 
 ## Estuary Flow
 
