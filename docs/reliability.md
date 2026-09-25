@@ -17,16 +17,16 @@ Verified result:
 - The repaired version was incrementally ingested.
 - The same dbt test then passed.
 
-### 2. Late-arriving source data is recovered
+### 2. Late-arriving source versions are recovered
 
-A claim is inserted into PostgreSQL with an `updated_at` timestamp deliberately older than the current claims watermark.
+The suite tests both a new claim key and a later version of an existing claim with `updated_at` values deliberately older than the current claims watermark.
 
 Verified result:
-- Normal watermark ingestion extracted 0 claim candidates and therefore did not load the late claim.
-- A reconciliation/backfill pass detected one missing source primary key.
-- The missing claim was inserted into RAW.
-- A second backfill replay inserted 0 additional rows.
-- Snowflake contains exactly one RAW version for that late-arriving claim.
+- Normal watermark ingestion misses the deliberately old versions.
+- Full-state reconciliation compares complete source-version identity `(source_table, source_pk, source_updated_at, payload_hash)`.
+- The missing new-key claim is recovered exactly once.
+- A later version of an already-known claim key is also recovered without overwriting the earlier version.
+- Replaying reconciliation inserts no duplicates.
 
 This demonstrates an explicit limitation of simple high-watermark ingestion and a recovery mechanism rather than pretending the watermark alone is sufficient.
 
@@ -61,9 +61,9 @@ Per-table structured logs also report source row count, candidate count, inserte
 
 ## CI evidence
 
-The successful controlled failure suite is GitHub Actions run `35917627966`.
+The current extended controlled failure suite is GitHub Actions run `35989125299`.
 
-The consolidated Platform CI is GitHub Actions run `35918223704`. It verifies:
+The current consolidated Platform CI is GitHub Actions run `36113302708`. It verifies:
 - Python static checks
 - Python tests
 - clean PostgreSQL 16 Docker startup
@@ -76,4 +76,4 @@ The consolidated Platform CI is GitHub Actions run `35918223704`. It verifies:
 - trusted `CLM-10042` mart state
 - three-row claim-history preservation
 
-Current dbt result in Platform CI: `PASS=67 WARN=0 ERROR=0 SKIP=0`.
+Current Platform CI results: Python `25 passed`; dbt `PASS=78 WARN=0 ERROR=0 SKIP=0 TOTAL=78`.
