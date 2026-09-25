@@ -2,7 +2,17 @@
 
 This document is the guided implementation path for the repository. It is organized by engineering responsibility rather than by folder so that the project reads as one coherent system.
 
-Use [concepts.md](concepts.md) whenever a technology or engineering term is unfamiliar. For the central PostgreSQL → Python → Snowflake path, [ingestion_deep_dive.md](ingestion_deep_dive.md) explains every core function, query, transaction boundary, failure mode and test.
+Use [concepts.md](concepts.md) whenever a technology or engineering term is unfamiliar.
+
+The detailed study sequence is:
+
+1. [PostgreSQL, SQL and source contracts](postgres_sql_contracts_deep_dive.md)
+2. [Ingestion: PostgreSQL → Snowflake](ingestion_deep_dive.md)
+3. [dbt, Snowflake modeling and business SQL](dbt_modeling_deep_dive.md)
+4. [Git, GitHub, CI/CD, security and OIDC](git_ci_security_deep_dive.md)
+5. [Neon, PostgreSQL WAL and Estuary CDC](estuary_cdc_deep_dive.md)
+
+Each deep dive maps the implementation to the underlying concept, exact file/query behavior, verification, limitations and interview-level reasoning.
 
 ## 1. Start from the analytical question
 

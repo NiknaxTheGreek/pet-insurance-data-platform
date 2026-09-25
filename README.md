@@ -42,6 +42,18 @@ Two reading paths are provided deliberately:
 
 The walkthrough maps the project from data-analyst skills through analytics engineering into data engineering. The concepts guide defines the technologies in project context rather than assuming prior platform knowledge.
 
+### Required technical deep dives
+
+| Deep dive | What it teaches |
+| --- | --- |
+| [PostgreSQL, SQL and source contracts](docs/postgres_sql_contracts_deep_dive.md) | relational modeling, keys, constraints, types, indexes, Docker source reproduction, information_schema, contracts and schema compatibility |
+| [Ingestion: PostgreSQL → Snowflake](docs/ingestion_deep_dive.md) | ChangeRecord semantics, canonical hashing, composite watermarks, staging, MERGE, transactions, retries and reconciliation |
+| [dbt, Snowflake modeling and business SQL](docs/dbt_modeling_deep_dive.md) | grain, current-state reconstruction, joins, facts/dimensions, SCD2, marts, contracts and business tests |
+| [Git, GitHub, CI/CD, security and OIDC](docs/git_ci_security_deep_dive.md) | version control, Actions, CI jobs, artifacts, Docker verification, workload identity, secret scanning and dependency security |
+| [Neon, PostgreSQL WAL and Estuary CDC](docs/estuary_cdc_deep_dive.md) | WAL, logical replication, publications, direct Neon connectivity, managed C/U/D capture and Snowflake materialization |
+
+These documents are part of the project deliverable: they explain the exact implementation, why each component exists, its failure behavior, its trade-offs and the competency demonstrated.
+
 ## Technology roles
 
 | Technology / concept | Role in this project |

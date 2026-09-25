@@ -13,7 +13,11 @@ https://github.com/NiknaxTheGreek/pet-insurance-data-platform/tree/submission-fi
 Guided technical documentation:
 - concepts and technology definitions: `docs/concepts.md`
 - analyst → analytics engineer → data engineer walkthrough: `docs/engineering_walkthrough.md`
-- function-by-function ingestion explanation: `docs/ingestion_deep_dive.md`
+- PostgreSQL / SQL / source contracts deep dive: `docs/postgres_sql_contracts_deep_dive.md`
+- function-by-function ingestion deep dive: `docs/ingestion_deep_dive.md`
+- dbt / Snowflake modeling / business SQL deep dive: `docs/dbt_modeling_deep_dive.md`
+- Git / GitHub / CI / security / OIDC deep dive: `docs/git_ci_security_deep_dive.md`
+- Neon / PostgreSQL WAL / Estuary CDC deep dive: `docs/estuary_cdc_deep_dive.md`
 - exact reproduction commands: `docs/reproduction.md`
 
 Do not lead with the ZIP unless they specifically ask for an offline copy. The GitHub repository is the strongest presentation because the reviewer can see the code, documentation, commit history, Actions evidence and architecture in one place.

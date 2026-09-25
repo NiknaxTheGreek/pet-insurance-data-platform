@@ -272,4 +272,11 @@ Managed integration proof
 Neon WAL → Estuary Flow → Snowflake
 ~~~
 
-For the guided implementation path, continue with [engineering_walkthrough.md](engineering_walkthrough.md). For the deepest treatment of the custom ingestion mechanism, continue with [ingestion_deep_dive.md](ingestion_deep_dive.md).
+For the guided implementation path, continue with [engineering_walkthrough.md](engineering_walkthrough.md).
+
+Deep implementation references:
+- [PostgreSQL, SQL and source contracts](postgres_sql_contracts_deep_dive.md)
+- [Ingestion: PostgreSQL → Snowflake](ingestion_deep_dive.md)
+- [dbt, Snowflake modeling and business SQL](dbt_modeling_deep_dive.md)
+- [Git, GitHub, CI/CD, security and OIDC](git_ci_security_deep_dive.md)
+- [Neon, PostgreSQL WAL and Estuary CDC](estuary_cdc_deep_dive.md)
