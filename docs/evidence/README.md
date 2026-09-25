@@ -9,8 +9,8 @@ The project treats a claim as verified only when it maps to code plus an execute
 | Additive + breaking schema evolution | 35988832514 | PASS |
 | Transaction rollback atomicity | 35989925581 | PASS |
 | 10k-customer controlled scale benchmark | 35990122190 | PASS |
-| Security: gitleaks + dependency audit + static gate | 35990015486 | PASS |
-| Consolidated Platform CI | 35990015280 | PASS |
+| Security: gitleaks + dependency audit + static/shell gate | 36113322776 | PASS |
+| Consolidated Platform CI (Python 25 passed; dbt 78/78) | 36113302708 | PASS |
 | Dagster orchestration proof | 35990181134 | PASS |
 | Estuary WAL CDC source C/U/D | 36033857733 | PASS |
 | Estuary → Snowflake materialization | 36040696100 | PASS |
