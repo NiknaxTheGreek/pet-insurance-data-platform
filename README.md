@@ -24,7 +24,15 @@ flowchart LR
 
 GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible PostgreSQL source. Dagster proves the same dependency chain can be expressed as an orchestrated workload.
 
-**Change data capture (CDC)** means detecting database changes—such as inserts, updates and deletes—and carrying those changes into another system. For example, when a claim moves from `SUBMITTED` to `APPROVED` to `PAID`, CDC keeps the downstream history synchronized with those changes.
+### How the data platform is divided
+
+PostgreSQL and Snowflake deliberately serve different workloads. PostgreSQL is the operational relational database: the application creates and updates customers, policies, claims and payments there. Snowflake is the analytical warehouse: larger transformations, historical analysis and reporting run there instead of competing with the operational application for CPU, memory, I/O and database connections.
+
+**Change data capture (CDC)** means detecting source changes—such as inserts, updates and deletes—and propagating those changes downstream rather than repeatedly copying the entire source. For example, when a claim moves from `SUBMITTED` to `APPROVED` to `PAID`, a CDC path can preserve those events downstream. Estuary Flow is the managed integration tool used here to read PostgreSQL's logical change stream and materialize it into Snowflake; CDC is the pattern, while Estuary is one implementation of that pattern.
+
+The first analytical landing area is **RAW**. RAW keeps incoming source versions close to what was received so later transformations can be audited, debugged and rebuilt. It is not treated as a database backup: backup and disaster recovery are separate operational concerns.
+
+**dbt** then runs SQL transformations inside Snowflake. It turns source-oriented RAW records into typed staging models, reusable intermediate models and business-facing **marts**. A mart is a curated analytical dataset designed around a business question or reporting need, rather than a copy of the operational schema.
 
 A second executed path reads PostgreSQL change events from the database log:
 
