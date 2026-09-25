@@ -65,7 +65,7 @@ I then use dbt to move through staging, intermediate and mart layers. Staging re
 
 I also built failure scenarios because I wanted the project to demonstrate reliability rather than just successful queries. An invalid payment date is ingested, the dbt rule fails, the source is repaired and the test then passes. I insert a deliberately late claim with a timestamp older than the current watermark; normal ingestion misses it, then reconciliation recovers it exactly once. I also soft-delete a claim and verify that RAW preserves the delete while the trusted mart excludes it.
 
-The whole project is exercised through GitHub Actions. Snowflake uses OIDC rather than a stored Snowflake password, PostgreSQL is reproducible in Docker, and the current dbt build is 67 out of 67 nodes passing.”
+The whole project is exercised through GitHub Actions. Snowflake uses OIDC rather than a stored Snowflake password, PostgreSQL is reproducible in Docker, the current Python suite is 25/25 passing, and dbt passes all 78 build nodes. I also executed a no-billing GCP proof in authenticated Cloud Shell using BigQuery Sandbox: a deterministic claims extract was loaded into a typed BigQuery table and reconciled with GoogleSQL against its source manifest.”
 
 ## Five-minute technical walkthrough
 
@@ -149,7 +149,7 @@ Mention:
 - 11 models
 - 67 dbt tests
 - 78/78 dbt build nodes passing
-- 24 Python tests passing
+- 25 Python tests passing
 
 ### 3:45–4:30 — Show CI/reproducibility
 
@@ -237,6 +237,14 @@ Answer:
 
 The project already proves both watermark/reconciliation and WAL-based Estuary CDC, plus Dagster orchestration, schema contracts and controlled scale testing. What I would add next would depend on real SLAs and volume: stronger environment isolation, production monitoring/on-call ownership, representative load testing and any additional orchestration or streaming infrastructure only where justified.”
 
+### “What did you actually do in GCP?”
+
+Answer:
+
+“The available GCP projects have billing disabled, so the production-style GCS path cannot create a bucket. I did not attach billing just to make the demo green. Instead, I executed a BigQuery Sandbox proof from authenticated Cloud Shell, which Google supports without a billing account. The committed runner generates a deterministic claims extract and manifest, creates a typed BigQuery table, loads the data, queries it with GoogleSQL and reconciles row count, claim-amount sum and ID bounds back to the manifest. It returned `GCP_BIGQUERY_SANDBOX_ASSERTION=PASS`.
+
+The repository still contains the production-style GitHub OIDC/WIF → private GCS → Snowflake external-stage/COPY implementation, but I explicitly label that path unexecuted because of the billing constraint.”
+
 ### “What was the most important bug you found?”
 
 Answer:
@@ -268,10 +276,11 @@ Prefer:
 2. Platform CI
 3. Reliability Failure Suite
 4. Estuary WAL CDC evidence
-5. Transaction Atomicity
-6. Scale Benchmark
-7. dbt models
-8. ADRs
-9. Performance/cost evidence
+5. GCP BigQuery Sandbox evidence
+6. Transaction Atomicity
+7. Scale Benchmark
+8. dbt models
+9. ADRs
+10. Performance/cost evidence
 
 The reviewer should not need the ZIP unless they want an offline copy.
