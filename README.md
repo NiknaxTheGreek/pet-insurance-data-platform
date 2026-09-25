@@ -4,7 +4,7 @@
 [![Reliability](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/reliability-suite.yml)
 [![Security](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/security.yml/badge.svg)](https://github.com/NiknaxTheGreek/pet-insurance-data-platform/actions/workflows/security.yml)
 
-Production-style ELT / CDC capability proof for a mutable pet-insurance workload.
+Production-style data platform for mutable pet-insurance data, with incremental history capture and change data capture (CDC).
 
 ## Problem
 
@@ -24,7 +24,9 @@ flowchart LR
 
 GitHub Actions provides CI/CD and Snowflake OIDC. Docker provides a reproducible PostgreSQL source. Dagster proves the same dependency chain can be expressed as an orchestrated workload.
 
-A second executed path proves managed log-based CDC:
+**Change data capture (CDC)** means detecting database changes—such as inserts, updates and deletes—and carrying those changes into another system. For example, when a claim moves from `SUBMITTED` to `APPROVED` to `PAID`, CDC keeps the downstream history synchronized with those changes.
+
+A second executed path reads PostgreSQL change events from the database log:
 
 ~~~text
 Neon PostgreSQL
@@ -33,12 +35,12 @@ Neon PostgreSQL
   → Snowflake PET_INSURANCE_ESTUARY.CLAIMS
 ~~~
 
-## How to read this repository
+## Documentation
 
-- **Reviewer:** README → [evidence](docs/evidence/) → [runbook](docs/runbook.md) → implementation.
-- **Learning / interview preparation:** read the single [Theory and architecture guide](docs/theory_and_architecture.md), then use [reproduction.md](docs/reproduction.md) to rebuild the system.
-
-The theory guide contains only the concepts needed to understand and defend this implementation; the source code, tests and evidence remain the detailed technical proof.
+- [Theory and architecture](docs/theory_and_architecture.md) — concepts and design
+- [Reproduction](docs/reproduction.md) — commands to rebuild and verify the system
+- [Runbook](docs/runbook.md) — operations and recovery
+- [Evidence](docs/evidence/) — executed verification results
 
 ## Technology roles
 
@@ -57,7 +59,7 @@ The theory guide contains only the concepts needed to understand and defend this
 | Estuary Flow | Managed CDC platform that reads Neon WAL changes and materializes history into Snowflake |
 | BigQuery | Independent GCP analytical-warehouse proof using deterministic batch loading and reconciliation |
 
-See [docs/theory_and_architecture.md](docs/theory_and_architecture.md) for the minimum theory behind these technologies and design choices.
+See [docs/theory_and_architecture.md](docs/theory_and_architecture.md) for the architecture and core concepts used here.
 
 ## Current verified evidence
 
@@ -141,7 +143,7 @@ A clean benchmark generated and loaded 82,956 rows:
 
 First set-based ingestion reconciled every row. The immediate second run produced zero candidates and zero inserts across all five tables.
 
-This is a controlled scale test, not an enterprise-throughput claim.
+At the tested size, the benchmark verifies complete ingestion and zero-duplicate replay behavior.
 
 Evidence: [scale_benchmark.md](docs/evidence/scale_benchmark.md).
 
@@ -151,7 +153,7 @@ Layering: RAW → STAGING → INTERMEDIATE → MARTS.
 
 Key models include typed staging models, backfill-safe int_claim_events, int_policy_claims, fct_claims, dim_policy, one intentional customer SCD2 and mart_portfolio_performance.
 
-The loss-ratio field is explicitly a proxy, not an actuarial earned-premium loss ratio.
+The paid loss-ratio proxy uses current monthly premium annualized by twelve because earned-premium exposure is not present in the source data.
 
 ## Security and reproducibility
 
@@ -166,13 +168,13 @@ The loss-ratio field is explicitly a proxy, not an actuarial earned-premium loss
 
 Verified Snowflake trial compute: Standard X-Small, auto-resume enabled, auto-suspend 300 seconds.
 
-The live trial uses SNOWFLAKE_LEARNING_ROLE. A least-privilege production role bootstrap is documented as PROPOSED, not falsely presented as deployed.
+The verified trial uses SNOWFLAKE_LEARNING_ROLE. A separate least-privilege production role bootstrap remains documented as PROPOSED.
 
 ## External integrations
 
 - **Estuary Flow — VERIFIED.** Live Neon runs with `wal_level=logical`; Estuary captures PostgreSQL WAL events in History Mode; a controlled claim produced create, update and physical-delete events; the Estuary collection was materialized into Snowflake; Snowflake contains exactly one `c`, one `u` and one `d` event for the disposable claim. See [docs/evidence/estuary_cdc.md](docs/evidence/estuary_cdc.md).
 - **Google Cloud — VERIFIED via BigQuery Sandbox.** A no-billing Cloud Shell proof created and loaded a typed BigQuery dataset/table and reconciled warehouse aggregates against a deterministic source manifest. See [docs/evidence/gcp_bigquery_sandbox.md](docs/evidence/gcp_bigquery_sandbox.md).
-- **GCS → Snowflake extension — NOT EXECUTED.** The production-style WIF/GCS/Snowflake implementation remains in the repo, but the available GCP projects have billing disabled, so GCS bucket creation is blocked by the provider.
+- **GCS → Snowflake extension — implementation retained.** The available GCP projects have billing disabled, so the provider-side bucket and transfer path were not run.
 
 See [docs/external_integrations.md](docs/external_integrations.md) for the exact verification boundary.
 
@@ -207,15 +209,9 @@ See [docs/reproduction.md](docs/reproduction.md) for live Snowflake execution.
 
 ## Five-minute review path
 
-1. Start here: architecture, verified evidence and explicit limitations in this README.
-2. Evidence index: [docs/evidence/README.md](docs/evidence/README.md).
-3. Ingestion mechanics: [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py).
-4. Analytical modeling: [dbt/models/](dbt/models/).
-5. Operations and decisions: [docs/runbook.md](docs/runbook.md) and [docs/adr/](docs/adr/).
-6. GitHub Actions proof: Platform CI, Reliability Failure Suite, Transaction Atomicity, Scale Benchmark, Security Gate, Dagster Orchestration Proof and Estuary CDC Mutation Proof.
-
-One-off diagnostic workflows used during development were intentionally removed from the final review surface; their executed run history and evidence remain documented.
-
-## Deliberate non-goals
-
-Kafka, Spark, Kubernetes and a permanent orchestration service are not added merely to increase technology count. They should be introduced only when latency, scale, topology or operational requirements justify them.
+1. Architecture and verified results in this README
+2. [Evidence index](docs/evidence/README.md)
+3. [Ingestion code](src/insurance_platform/run_ingestion.py) and [reconciliation](src/insurance_platform/reconcile_source_state.py)
+4. [dbt models](dbt/models/)
+5. [Runbook](docs/runbook.md) and [architecture decisions](docs/adr/)
+6. GitHub Actions: Platform CI, Reliability, Transaction Atomicity, Scale Benchmark, Security, Dagster and Estuary CDC
