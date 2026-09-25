@@ -8,7 +8,7 @@ https://github.com/NiknaxTheGreek/pet-insurance-data-platform
 
 Frozen review branch:
 
-https://github.com/NiknaxTheGreek/pet-insurance-data-platform/tree/submission-candidate-2026-09-24
+https://github.com/NiknaxTheGreek/pet-insurance-data-platform/tree/submission-candidate-2026-09-25
 
 Do not lead with the ZIP unless they specifically ask for an offline copy. The GitHub repository is the strongest presentation because the reviewer can see the code, documentation, commit history, Actions evidence and architecture in one place.
 
