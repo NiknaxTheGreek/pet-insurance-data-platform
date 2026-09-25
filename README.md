@@ -47,7 +47,8 @@ Neon PostgreSQL
 - Estuary WAL capture: INSERT / UPDATE / physical DELETE PASS
 - Estuary → Snowflake materialization: PASS
 - Snowflake Estuary history: 1 create + 1 update + 1 delete for the disposable CDC claim
-- Python tests: 24 passed
+- GCP BigQuery Sandbox reconciliation: PASS
+- Python tests: 25 passed
 - dbt: 11 models + 67 tests; 78/78 build nodes passed
 
 Executed evidence is indexed in [docs/evidence/](docs/evidence/).
@@ -141,7 +142,8 @@ The live trial uses SNOWFLAKE_LEARNING_ROLE. A least-privilege production role b
 ## External integrations
 
 - **Estuary Flow — VERIFIED.** Live Neon runs with `wal_level=logical`; Estuary captures PostgreSQL WAL events in History Mode; a controlled claim produced create, update and physical-delete events; the Estuary collection was materialized into Snowflake; Snowflake contains exactly one `c`, one `u` and one `d` event for the disposable claim. See [docs/evidence/estuary_cdc.md](docs/evidence/estuary_cdc.md).
-- **Google Cloud / GCS — NOT YET PROVIDER-VERIFIED.** Deterministic export, GitHub WIF workflow, private GCS upload, Snowflake external stage/COPY and reconciliation are implemented and CI-tested on the repo side. GCP authentication/project/WIF setup is still required.
+- **Google Cloud — VERIFIED via BigQuery Sandbox.** A no-billing Cloud Shell proof created and loaded a typed BigQuery dataset/table and reconciled warehouse aggregates against a deterministic source manifest. See [docs/evidence/gcp_bigquery_sandbox.md](docs/evidence/gcp_bigquery_sandbox.md).
+- **GCS → Snowflake extension — NOT EXECUTED.** The production-style WIF/GCS/Snowflake implementation remains in the repo, but the available GCP projects have billing disabled, so GCS bucket creation is blocked by the provider.
 
 See [docs/external_integrations.md](docs/external_integrations.md) for the exact verification boundary.
 
@@ -180,6 +182,7 @@ See [docs/reproduction.md](docs/reproduction.md) for live Snowflake execution.
 6. dbt/models/
 7. docs/adr/
 8. GitHub Actions: Platform CI, Reliability, Transaction Atomicity, Scale Benchmark, Security Gate, Dagster proof and Estuary CDC proof
+9. GCP BigQuery Sandbox evidence
 
 ## Deliberate non-goals
 
