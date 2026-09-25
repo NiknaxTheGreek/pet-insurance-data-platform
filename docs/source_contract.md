@@ -15,7 +15,7 @@ PostgreSQL is the simulated mutable operational source. Five entities are intent
 | claim_payments | one row per payment transaction | payment_id | belongs to claim | payment status may update/reverse; soft-delete flag |
 
 ## Change-capture contract
-Every mutable table carries `created_at`, `updated_at`, and `is_deleted`. These fields provide the minimal source contract required for the first incremental/CDC implementation. The ingestion design must be idempotent and must not treat `updated_at` alone as proof that an event was processed exactly once.
+Every mutable table carries `created_at`, `updated_at`, and `is_deleted`. These fields provide the minimal source contract required for the custom incremental ingestion path. The ingestion design must be idempotent and must not treat `updated_at` alone as proof that an event was processed exactly once.
 
 ## Analytical outcome
 The eventual mart will support portfolio performance analysis including active policies, premiums, claim counts, incurred/approved amounts, paid amounts, frequency/severity proxies, and loss-ratio-style measures where the premium denominator is defined correctly.
