@@ -9,7 +9,7 @@ Repository: `NiknaxTheGreek/pet-insurance-data-platform`
 | Capability | Evidence |
 | --- | --- |
 | Consolidated Python + Docker + Snowflake/dbt gate | Platform CI run 36113302708 — PASS |
-| Python suite | run 36113302847 — 25 passed |
+| Python suite | Platform CI run 36113302708, Python quality job — 25 passed |
 | Security gate | run 36113322776 — PASS |
 | Live hardened incremental ingestion | run 35988189813 — PASS |
 | Reliability / late-data / soft-delete suite | run 35989125299 — PASS |
