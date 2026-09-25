@@ -3,67 +3,52 @@
 ## Local verification
 
 Requirements:
-
-- Python 3.11+
+- Python 3.12 recommended
 - Docker with Docker Compose
 
-Install and run Python tests:
+Bootstrap and test:
 
 ```bash
-python -m pip install -e ".[dev]"
-pytest -q
+make bootstrap
+make test
+make postgres-up
+make postgres-smoke
+make postgres-down
 ```
 
-Start a clean PostgreSQL source:
+The clean PostgreSQL source reproduces the live-style string-ID schema and enforces the customer → pet → policy → claim → payment relationship plus source constraints.
 
-```bash
-docker compose up -d postgres
-```
+## Live custom PostgreSQL → Snowflake path
 
-Run the source smoke test:
+Required:
+- repository secret `POSTGRES_DSN`;
+- Snowflake service user `PET_INSURANCE_GITHUB`;
+- GitHub OIDC workload identity;
+- current trial warehouse/database/role access.
 
-```bash
-docker compose exec -T postgres \
-  psql -U insurance_app -d insurance -v ON_ERROR_STOP=1 \
-  < infra/postgres/smoke_test.sql
-```
-
-The smoke test proves:
-
-- all five source tables exist
-- live-style text IDs work
-- the customer→pet→policy→claim→payment relationship chain is valid
-- PostgreSQL rejects a claim where approved amount exceeds claim amount
-
-Stop and remove the environment:
-
-```bash
-docker compose down -v
-```
-
-## Live PostgreSQL → Snowflake
-
-The live workflow requires:
-
-- GitHub repository secret `POSTGRES_DSN`
-- Snowflake service user `PET_INSURANCE_GITHUB`
-- GitHub OIDC workload identity configured in Snowflake
-- access to `SNOWFLAKE_LEARNING_WH` and `SNOWFLAKE_LEARNING_DB` in the current trial environment
-
-Run the GitHub workflow:
-
+Run:
 `Live Incremental Ingestion`
 
-The runner reads current Snowflake watermarks, queries only newer PostgreSQL rows, hashes/deduplicates source records, merges them idempotently into RAW, advances table watermarks, and records batch audit rows.
+The runner:
+1. validates source contracts;
+2. extracts changes using composite `(updated_at, primary_key)` watermarks;
+3. canonicalizes and hashes payloads;
+4. stages records in bounded batches;
+5. performs one set-based RAW MERGE per table;
+6. reconciles staged candidates;
+7. commits RAW + watermark + SUCCESS audit atomically;
+8. cleans stage rows;
+9. exposes state through `INGESTION_HEALTH`.
+
+For versions that fall behind the high watermark:
+
+```bash
+python -m insurance_platform.reconcile_source_state
+```
+
+This compares `(source_table, source_pk, source_updated_at, payload_hash)` and is idempotent.
 
 ## dbt
-
-CI uses:
-
-- dbt Core 1.12.x
-- dbt-snowflake 1.12.1
-
-The Snowflake profile is environment-driven and authenticates through workload identity.
 
 Core commands:
 
@@ -73,20 +58,76 @@ dbt build --project-dir dbt --profiles-dir dbt --fail-fast
 dbt docs generate --project-dir dbt --profiles-dir dbt
 ```
 
-Do not expect the live dbt commands to work locally unless the same Snowflake OIDC environment variables/token are available.
+Current verified result:
+- 11 models
+- 67 tests
+- 78/78 dbt build nodes pass
 
-## Verification workflows
+## Estuary WAL CDC
 
-- `Platform CI` — main consolidated quality gate
-- `Snowflake OIDC Deploy` — deploys/verifies RAW and CONTROL infrastructure
-- `dbt Build` — builds/tests/documents the transformation layer
-- `Reliability Failure Suite` — controlled invalid-data, late-arrival and soft-delete scenarios
-- `Performance Evidence` — row-count, completeness, explain-plan and warehouse evidence
-- `T4 Paid Claim Demo` — focal claim progression to PAID
-- `Customer SCD2 Demo` — real customer-history proof
+See:
+`integrations/estuary/README.md`
 
-## Secret handling
+Executed provider path:
 
-Never commit the PostgreSQL DSN or Snowflake token.
+`Neon PostgreSQL → logical replication/WAL → Estuary Flow → Snowflake`
 
-Snowflake CI uses a short-lived GitHub OIDC token. The only persistent source credential required by the live workflow is `POSTGRES_DSN`, stored as a GitHub Actions repository secret.
+The repository contains:
+- source-readiness checker;
+- direct-Neon DSN derivation;
+- `flowctl` capture publisher;
+- C/U/D mutation proof;
+- Snowflake JWT materialization workflow;
+- final Snowflake C/U/D assertion.
+
+Evidence:
+`docs/evidence/estuary_cdc.md`
+
+## GCP no-billing proof
+
+See:
+`integrations/gcp/BIGQUERY_SANDBOX.md`
+
+From authenticated Google Cloud Shell:
+
+```bash
+python3 -m pip install -e . --no-deps
+bash integrations/gcp/run_bigquery_sandbox.sh
+```
+
+Success marker:
+
+```text
+GCP_BIGQUERY_SANDBOX_ASSERTION=PASS
+```
+
+The runner loads a deterministic typed claims dataset into BigQuery Sandbox and reconciles it against its SHA-256/source aggregate manifest.
+
+The production-style GCS → Snowflake implementation remains under `integrations/gcp/` and `.github/workflows/gcp-backfill.yml`, but provider execution requires a billing-enabled GCP project.
+
+## Main verification workflows
+
+- `Platform CI` — consolidated Python, Docker/PostgreSQL and Snowflake/dbt gate
+- `Live Incremental Ingestion` — live custom source path
+- `Reliability Failure Suite` — invalid-data, late-arrival/version and delete scenarios
+- `Transaction Atomicity` — injected rollback proof
+- `Schema Evolution` — additive acceptance + breaking rejection
+- `Scale Benchmark` — deterministic 82,956-row ingestion/replay proof
+- `Security Gate` — gitleaks, dependency audit, static/shell checks
+- `Dagster Orchestration Proof` — dependency-chain execution
+- `Estuary Neon Capture` — WAL capture publish
+- `Estuary CDC Mutation Proof` — create/update/physical-delete proof
+- `Estuary Snowflake Materialization` — managed CDC destination
+- `Estuary Snowflake CDC Evidence` — final Snowflake history assertion
+
+## Secrets and identities
+
+Never commit:
+- PostgreSQL DSN;
+- Estuary refresh token;
+- Snowflake OIDC token;
+- private RSA keys.
+
+Persistent secrets used by provider workflows are held in repository secret storage. Snowflake CI uses short-lived GitHub OIDC. Estuary's Snowflake JWT private key is generated ephemerally by CI for the trial proof.
+
+See `docs/runbook.md` for operational recovery procedures.
