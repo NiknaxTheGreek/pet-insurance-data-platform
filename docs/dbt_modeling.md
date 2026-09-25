@@ -4,7 +4,7 @@
 
 dbt (data build tool) manages SQL transformations, tests, contracts and lineage **inside** the Snowflake warehouse. Snowflake stores and executes the analytical data; dbt defines how RAW data becomes trusted analytical models. dbt does not perform the PostgreSQL → Snowflake extraction.
 
-For definitions of dbt, Snowflake, materializations, grain, facts, dimensions and SCD Type 2, see [concepts.md](concepts.md).
+For definitions of dbt, Snowflake, grain, facts, dimensions and SCD Type 2, see [theory_and_architecture.md](theory_and_architecture.md).
 
 The dbt layer converts append-only source history in Snowflake RAW into typed current-state models, reusable intermediate logic, historical event models, and business-facing marts.
 
