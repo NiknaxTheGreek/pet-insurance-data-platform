@@ -6,9 +6,6 @@ Primary link:
 
 https://github.com/NiknaxTheGreek/pet-insurance-data-platform
 
-Frozen review branch:
-
-https://github.com/NiknaxTheGreek/pet-insurance-data-platform/tree/submission-final-2026-09-25
 
 Guided documentation:
 - theory and architecture: `docs/theory_and_architecture.md`
