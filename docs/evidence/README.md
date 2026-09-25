@@ -15,6 +15,7 @@ The project treats a claim as verified only when it maps to code plus an execute
 | Estuary WAL CDC source C/U/D | 36033857733 | PASS |
 | Estuary → Snowflake materialization | 36040696100 | PASS |
 | Estuary C/U/D history in Snowflake | 36041150766 | PASS |
+| GCP BigQuery Sandbox provider proof | manual Cloud Shell | PASS |
 
 The evidence files in this directory contain the scenario, expected result, actual result and verification mechanism. They do not substitute screenshots for executable proof.
 
@@ -24,6 +25,7 @@ The evidence files in this directory contain the scenario, expected result, actu
 | Integration | Status | Evidence |
 | --- | --- | --- |
 | Estuary provider execution | VERIFIED | WAL/logical replication + INSERT/UPDATE/physical DELETE + Snowflake materialization all passed; see `estuary_cdc.md` |
-| GCP/GCS provider execution | BLOCKED / NOT VERIFIED | repo package + deterministic export test exist; GCP login/project unavailable |
+| GCP provider execution | VERIFIED via BigQuery Sandbox | manual Cloud Shell execution + deterministic manifest reconciliation; see `gcp_bigquery_sandbox.md` |
+| GCS→Snowflake provider execution | NOT EXECUTED | billing-disabled projects block bucket creation; implementation retained as production-style extension |
 
-Only the GCP row remains blocked.
+GCP capability is verified via BigQuery Sandbox; only the billing-dependent GCS→Snowflake extension remains unexecuted.
