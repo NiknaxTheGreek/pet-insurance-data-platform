@@ -272,4 +272,4 @@ Managed integration proof
 Neon WAL → Estuary Flow → Snowflake
 ~~~
 
-For the guided file-by-file implementation path, continue with [engineering_walkthrough.md](engineering_walkthrough.md).
+For the guided implementation path, continue with [engineering_walkthrough.md](engineering_walkthrough.md). For the deepest treatment of the custom ingestion mechanism, continue with [ingestion_deep_dive.md](ingestion_deep_dive.md).

@@ -2,7 +2,7 @@
 
 ## Local verification
 
-If Git, PostgreSQL, Snowflake, dbt, OIDC, CDC or the other platform terms are unfamiliar, read [concepts.md](concepts.md) first. The file-by-file implementation order is in [engineering_walkthrough.md](engineering_walkthrough.md).
+If Git, PostgreSQL, Snowflake, dbt, OIDC, CDC or the other platform terms are unfamiliar, read [concepts.md](concepts.md) first. The file-by-file implementation order is in [engineering_walkthrough.md](engineering_walkthrough.md), and the core ingestion code is explained function-by-function in [ingestion_deep_dive.md](ingestion_deep_dive.md).
 
 Requirements:
 

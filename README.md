@@ -38,7 +38,7 @@ Neon PostgreSQL
 Two reading paths are provided deliberately:
 
 - **Technical reviewer:** stay in this README, then use [docs/evidence/](docs/evidence/), [docs/runbook.md](docs/runbook.md) and the implementation files linked below.
-- **Learner / candidate preparing to defend the project:** start with [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md), then use [docs/concepts.md](docs/concepts.md) whenever a term is unfamiliar.
+- **Learner / candidate preparing to defend the project:** start with [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md), use [docs/concepts.md](docs/concepts.md) whenever a term is unfamiliar, then study the core pipeline function-by-function in [docs/ingestion_deep_dive.md](docs/ingestion_deep_dive.md).
 
 The walkthrough maps the project from data-analyst skills through analytics engineering into data engineering. The concepts guide defines the technologies in project context rather than assuming prior platform knowledge.
 
@@ -113,7 +113,7 @@ Correctness path:
 - recover new or changed versions that arrived behind the high watermark;
 - replay reconciliation without duplication.
 
-See [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py).
+See [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py). A function-by-function explanation of the exact SQL, transaction boundary, replay behavior, late-data recovery and CLM-10042 flow is in [docs/ingestion_deep_dive.md](docs/ingestion_deep_dive.md).
 
 ## Transaction failure proof
 
@@ -178,18 +178,22 @@ The live trial uses SNOWFLAKE_LEARNING_ROLE. A least-privilege production role b
 
 See [docs/external_integrations.md](docs/external_integrations.md) for the exact verification boundary.
 
-## What broke while I built this
+## Engineering safeguards verified
 
-1. The intended custom Snowflake CI role did not exist in the trial account; the verified learning role was used and the production role stayed proposed.
-2. PostgreSQL Decimal values broke canonical JSON serialization; deterministic Decimal handling was added and regression-tested.
-3. Bootstrapping one claim advanced a table watermark past older claims; reconciliation exposed and repaired the gap.
-4. A max(raw_record_id) incremental predicate could not recover older missing events; it was replaced with a unique-key anti-join.
-5. Snowflake connector executemany could not rewrite an INSERT containing PARSE_JSON; JSON is staged as text and parsed in the set-based MERGE.
-6. A Snowflake ALTER with a default was not idempotent against the migrated table; the migration was corrected.
-7. Executable contracts exposed live-source differences from initial assumptions (VARCHAR vs TEXT, nullable breed and additional customer fields); the checked-in contract was aligned to reality.
-8. Transaction testing proved failure handling must cover staging errors as well as MERGE errors.
+The final implementation deliberately verifies the failure modes that matter to correctness rather than treating a green happy-path run as sufficient:
 
-These failures are retained as engineering evidence rather than hidden behind the final architecture.
+- deterministic Decimal/date serialization and payload hashing;
+- connector-safe staged JSON binding;
+- composite watermark ordering;
+- non-regressing progress for late source versions;
+- full-state recovery of new and changed late versions;
+- transaction rollback between RAW MERGE and watermark advancement;
+- idempotent unchanged replay;
+- additive schema evolution and breaking-change rejection;
+- soft-delete propagation;
+- data-quality and PII boundaries.
+
+These are controlled verification scenarios. The canonical implementation path is documented in [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md).
 
 ## Quick start
 

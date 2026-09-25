@@ -2,7 +2,7 @@
 
 This document is the guided implementation path for the repository. It is organized by engineering responsibility rather than by folder so that the project reads as one coherent system.
 
-Use [concepts.md](concepts.md) whenever a technology or engineering term is unfamiliar.
+Use [concepts.md](concepts.md) whenever a technology or engineering term is unfamiliar. For the central PostgreSQL → Python → Snowflake path, [ingestion_deep_dive.md](ingestion_deep_dive.md) explains every core function, query, transaction boundary, failure mode and test.
 
 ## 1. Start from the analytical question
 
@@ -249,6 +249,8 @@ Why this matters:
 - reconciliation = bounded correctness path.
 
 Competency demonstrated: late-arriving data, backfill reasoning, idempotency and source/warehouse reconciliation.
+
+At this point, pause the high-level walkthrough and read [ingestion_deep_dive.md](ingestion_deep_dive.md). It traces ingestion.py, run_ingestion.py and reconcile_source_state.py function-by-function and follows CLM-10042 through the complete transaction.
 
 ## 11. Transform RAW history with dbt
 
