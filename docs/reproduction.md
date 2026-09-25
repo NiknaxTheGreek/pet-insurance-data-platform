@@ -2,14 +2,7 @@
 
 ## Local verification
 
-If Git, PostgreSQL, Snowflake, dbt, OIDC, CDC or the other platform terms are unfamiliar, read [concepts.md](concepts.md) first. The file-by-file implementation order is in [engineering_walkthrough.md](engineering_walkthrough.md).
-
-Before reproducing unfamiliar sections, use the corresponding deep dive:
-- [PostgreSQL / SQL / contracts](postgres_sql_contracts_deep_dive.md)
-- [custom ingestion](ingestion_deep_dive.md)
-- [dbt / analytical modeling](dbt_modeling_deep_dive.md)
-- [GitHub / CI / security / OIDC](git_ci_security_deep_dive.md)
-- [Neon / WAL / Estuary CDC](estuary_cdc_deep_dive.md)
+If the architecture or terminology is unfamiliar, read [theory_and_architecture.md](theory_and_architecture.md) first. This guide intentionally keeps reproduction separate from theory.
 
 Requirements:
 

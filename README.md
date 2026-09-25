@@ -35,24 +35,10 @@ Neon PostgreSQL
 
 ## How to read this repository
 
-Two reading paths are provided deliberately:
+- **Reviewer:** README → [evidence](docs/evidence/) → [runbook](docs/runbook.md) → implementation.
+- **Learning / interview preparation:** read the single [Theory and architecture guide](docs/theory_and_architecture.md), then use [reproduction.md](docs/reproduction.md) to rebuild the system.
 
-- **Technical reviewer:** stay in this README, then use [docs/evidence/](docs/evidence/), [docs/runbook.md](docs/runbook.md) and the implementation files linked below.
-- **Learner / candidate preparing to defend the project:** start with [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md), use [docs/concepts.md](docs/concepts.md) whenever a term is unfamiliar, then study the core pipeline function-by-function in [docs/ingestion_deep_dive.md](docs/ingestion_deep_dive.md).
-
-The walkthrough maps the project from data-analyst skills through analytics engineering into data engineering. The concepts guide defines the technologies in project context rather than assuming prior platform knowledge.
-
-### Required technical deep dives
-
-| Deep dive | What it teaches |
-| --- | --- |
-| [PostgreSQL, SQL and source contracts](docs/postgres_sql_contracts_deep_dive.md) | relational modeling, keys, constraints, types, indexes, Docker source reproduction, information_schema, contracts and schema compatibility |
-| [Ingestion: PostgreSQL → Snowflake](docs/ingestion_deep_dive.md) | ChangeRecord semantics, canonical hashing, composite watermarks, staging, MERGE, transactions, retries and reconciliation |
-| [dbt, Snowflake modeling and business SQL](docs/dbt_modeling_deep_dive.md) | grain, current-state reconstruction, joins, facts/dimensions, SCD2, marts, contracts and business tests |
-| [Git, GitHub, CI/CD, security and OIDC](docs/git_ci_security_deep_dive.md) | version control, Actions, CI jobs, artifacts, Docker verification, workload identity, secret scanning and dependency security |
-| [Neon, PostgreSQL WAL and Estuary CDC](docs/estuary_cdc_deep_dive.md) | WAL, logical replication, publications, direct Neon connectivity, managed C/U/D capture and Snowflake materialization |
-
-These documents are part of the project deliverable: they explain the exact implementation, why each component exists, its failure behavior, its trade-offs and the competency demonstrated.
+The theory guide contains only the concepts needed to understand and defend this implementation; the source code, tests and evidence remain the detailed technical proof.
 
 ## Technology roles
 
@@ -71,7 +57,7 @@ These documents are part of the project deliverable: they explain the exact impl
 | Estuary Flow | Managed CDC platform that reads Neon WAL changes and materializes history into Snowflake |
 | BigQuery | Independent GCP analytical-warehouse proof using deterministic batch loading and reconciliation |
 
-See [docs/concepts.md](docs/concepts.md) for precise definitions of CDC, WAL, watermarks, idempotency, MERGE, reconciliation, SCD2, OIDC and related terms.
+See [docs/theory_and_architecture.md](docs/theory_and_architecture.md) for the minimum theory behind these technologies and design choices.
 
 ## Current verified evidence
 
@@ -125,7 +111,7 @@ Correctness path:
 - recover new or changed versions that arrived behind the high watermark;
 - replay reconciliation without duplication.
 
-See [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py). A function-by-function explanation of the exact SQL, transaction boundary, replay behavior, late-data recovery and CLM-10042 flow is in [docs/ingestion_deep_dive.md](docs/ingestion_deep_dive.md).
+See [run_ingestion.py](src/insurance_platform/run_ingestion.py) and [reconcile_source_state.py](src/insurance_platform/reconcile_source_state.py). The underlying design is summarized in [docs/theory_and_architecture.md](docs/theory_and_architecture.md).
 
 ## Transaction failure proof
 
@@ -205,7 +191,7 @@ The final implementation deliberately verifies the failure modes that matter to 
 - soft-delete propagation;
 - data-quality and PII boundaries.
 
-These are controlled verification scenarios. The canonical implementation path is documented in [docs/engineering_walkthrough.md](docs/engineering_walkthrough.md).
+These are controlled verification scenarios; implementation details are proven by the code, tests and [evidence](docs/evidence/).
 
 ## Quick start
 
