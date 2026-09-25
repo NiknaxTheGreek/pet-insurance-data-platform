@@ -98,7 +98,7 @@ Show:
 - second ingestion: zero candidates / zero inserts;
 - `Security Gate`: full-history gitleaks, dependency audit, Ruff, integration-script syntax;
 - latest Python suite: 25 passed;
-- `Dagster Orchestration Proof`: source ingestion → reconciliation → dbt → health verification.
+- `Dagster Orchestration Proof`: source-contract validation → incremental ingestion → dbt build → ingestion-health verification.
 
 State clearly that the scale test is controlled evidence, not an enterprise-throughput benchmark.
 
