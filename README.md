@@ -203,6 +203,10 @@ The final implementation deliberately verifies the failure modes that matter to 
 
 These are controlled verification scenarios; implementation details are proven by the code, tests and [evidence](docs/evidence/).
 
+## Deliberate scope boundaries
+
+This repository does not include every component of a large production data estate. A permanent scheduler, event bus, infrastructure-as-code layer, distributed compute engine, enterprise observability/catalog tooling and BI dashboard are intentionally outside the implemented scope. The alternatives and the conditions under which they would become justified are documented in [ADR 005 — Complexity must be earned](docs/adr/005-scope-cost-and-tooling.md).
+
 ## Quick start
 
 ~~~bash
