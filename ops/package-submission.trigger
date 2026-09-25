@@ -1,2 +1,2 @@
-trigger: 2026-09-24T07:36:30Z
-reason: rebuild-submission-candidate-with-badger-guide
+trigger: 2026-09-25T13:40:00Z
+reason: build-final-2026-09-25-submission-package
